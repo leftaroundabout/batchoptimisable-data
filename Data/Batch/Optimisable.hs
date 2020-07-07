@@ -34,7 +34,7 @@ class BatchOptimisable d where
   data Optimised d (t :: Type->Type) :: Type
   peekOptimised :: Traversable t => Optimised d t -> t d
   optimiseBatch :: (Traversable t, BatchOptimisable d')
-                     => (Optimised d t -> Optimised d' t) -> t d -> OptimiseM (t d')
+     => (Optimised d t -> OptimiseM (Optimised d' t)) -> t d -> OptimiseM (t d')
 
 instance BatchOptimisable Int where
   data Optimised Int t
@@ -44,7 +44,7 @@ instance BatchOptimisable Int where
   peekOptimised (IntVector vals shape)
         = (`SSM.evalState`0) . (`traverse`shape)
          $ \() -> SSM.state $ \i -> (vals VU.!{-unsafeIndex-} i, i+1)
-  optimiseBatch f input = OptimiseM $ \SystemCapabilities -> do
+  optimiseBatch f input = OptimiseM $ \sysCaps -> do
       let n = Foldable.length input
       valV <- VUM.unsafeNew n
       shape <- (`evalStateT`0) . (`traverse`input) $ \x -> do
@@ -53,5 +53,6 @@ instance BatchOptimisable Int where
          put $ i+1
          pure ()
       vals <- VU.freeze{-unsafeFreeze-} valV
-      pure . peekOptimised . f $ IntVector vals shape
+      let OptimiseM process = f (IntVector vals shape)
+      peekOptimised <$> process sysCaps
   
