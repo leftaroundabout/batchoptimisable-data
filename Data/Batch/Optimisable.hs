@@ -8,9 +8,10 @@
 -- Portability : portable
 -- 
 
-{-# LANGUAGE TypeFamilies    #-}
-{-# LANGUAGE TypeInType      #-}
-{-# LANGUAGE KindSignatures  #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE TypeInType        #-}
+{-# LANGUAGE KindSignatures    #-}
 
 
 module Data.Batch.Optimisable
@@ -24,7 +25,11 @@ import Data.Foldable as Foldable
 
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector.Unboxed.Mutable as VUM
+
+import Control.Monad
 import Control.Monad.Trans.State.Strict as SSM
+
+import qualified Test.QuickCheck as QC
 
 data SystemCapabilities = SystemCapabilities
 
@@ -56,3 +61,11 @@ instance BatchOptimisable Int where
       let OptimiseM process = f (IntVector vals shape)
       peekOptimised <$> process sysCaps
   
+instance (Foldable t, QC.Arbitrary (t ()))
+             => QC.Arbitrary (Optimised Int t) where
+  arbitrary = do
+     shape <- QC.arbitrary
+     let n = Foldable.length shape
+     values <- replicateM n QC.arbitrary
+     return $ IntVector (VU.fromList values) shape
+  shrink = undefined
