@@ -12,6 +12,9 @@
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeInType          #-}
 {-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE UnicodeSyntax       #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE DeriveFunctor       #-}
 
 
@@ -93,3 +96,7 @@ instance (Foldable t, QC.Arbitrary (t ()))
      values <- replicateM n QC.arbitrary
      return $ IntVector (VU.fromList values) shape
   shrink = undefined
+
+newtype x//>//y = BatchedFunction
+   { getBatchedFunction :: ∀ t . Traversable t
+       => Optimised x t -> OptimiseM (Optimised y t) }
