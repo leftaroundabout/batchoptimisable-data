@@ -8,6 +8,7 @@
 -- Portability : portable
 -- 
 
+{-# LANGUAGE ScopedTypeVariables #-}
 
 import Data.Batch.Optimisable
 
@@ -16,7 +17,11 @@ import Test.Tasty.QuickCheck
 import qualified Test.QuickCheck as QC
 
 main :: IO ()
-main = defaultMain $ testGroup "Tests"
- []
+main = do
+  cpb <- detectCpuCapabilities
+  defaultMain $ testGroup "Tests"
+   [ testProperty "Retrieve optimised integer list"
+     $ \(l :: [Int]) -> runWithCapabilities cpb (optimiseBatch pure l) === l
+   ]
 
 

@@ -8,15 +8,20 @@
 -- Portability : portable
 -- 
 
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies      #-}
-{-# LANGUAGE TypeInType        #-}
-{-# LANGUAGE KindSignatures    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeInType          #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE DeriveFunctor       #-}
 
 
-module Data.Batch.Optimisable
-   ( SystemCapabilities
-   , BatchOptimisable(..)
+module Data.Batch.Optimisable (
+   -- * Batch-packed data
+     BatchOptimisable(..)
+   , OptimiseM, runWithCapabilities
+   -- * System resource bookkeeping
+   , SystemCapabilities
+   , detectCpuCapabilities
    ) where
 
 import Data.Kind(Type)
@@ -31,9 +36,28 @@ import Control.Monad.Trans.State.Strict as SSM
 
 import qualified Test.QuickCheck as QC
 
+import System.IO.Unsafe
+
 data SystemCapabilities = SystemCapabilities
 
+detectCpuCapabilities :: IO SystemCapabilities
+detectCpuCapabilities = pure SystemCapabilities
+
 newtype OptimiseM a = OptimiseM { runOptimiseM :: SystemCapabilities -> IO a }
+  deriving (Functor)
+
+instance Applicative OptimiseM where
+  pure = OptimiseM . const . pure
+  OptimiseM fs <*> OptimiseM xs = OptimiseM $ \cpbs -> fs cpbs <*> xs cpbs
+instance Monad OptimiseM where
+  return = pure
+  OptimiseM xs >>= f = OptimiseM $ \cpbs -> do
+     x <- xs cpbs
+     let OptimiseM ys = f x
+     ys cpbs
+
+runWithCapabilities :: SystemCapabilities -> OptimiseM a -> a
+runWithCapabilities cpbs (OptimiseM r) = unsafePerformIO $ r cpbs
 
 class BatchOptimisable d where
   data Optimised d (t :: Type->Type) :: Type
