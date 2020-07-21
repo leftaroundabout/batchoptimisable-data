@@ -80,10 +80,16 @@ runWithCapabilities cpbs (OptimiseM r) = unsafePerformIO $ do
 
 class BatchOptimisable d where
   data Optimised d (s :: UniqueStateTag) (t :: Type->Type) :: Type
+  allocateBatch :: Traversable t => t d -> OptimiseM s (Optimised d s t)
   peekOptimised :: Traversable t => Optimised d s t -> OptimiseM s (t d)
   optimiseBatch :: (Traversable t, BatchOptimisable d')
      => (Optimised d s t -> OptimiseM s (Optimised d' s t))
                 -> t d -> OptimiseM s (t d')
+  optimiseBatch f xs = OptimiseM $ \sysCaps -> do
+      (xVals, xRscR) <- runOptimiseM (allocateBatch xs) sysCaps
+      (yVals, yRscR) <- runOptimiseM (f xVals) sysCaps
+      (peekd, _) <- runOptimiseM (peekOptimised yVals) sysCaps
+      return (peekd, xRscR.yRscR)
 
 instance BatchOptimisable Int where
   data Optimised Int s t
@@ -93,7 +99,7 @@ instance BatchOptimisable Int where
   peekOptimised (IntVector vals shape)
         = pure . (`SSM.evalState`0) . (`traverse`shape)
          $ \() -> SSM.state $ \i -> (vals VU.!{-unsafeIndex-} i, i+1)
-  optimiseBatch f input = OptimiseM $ \sysCaps -> do
+  allocateBatch input = OptimiseM $ \_ -> do
       let n = Foldable.length input
       valV <- VUM.unsafeNew n
       shape <- (`evalStateT`0) . (`traverse`input) $ \x -> do
@@ -102,11 +108,7 @@ instance BatchOptimisable Int where
          put $ i+1
          pure ()
       vals <- VU.freeze{-unsafeFreeze-} valV
-      let OptimiseM process = f (IntVector vals shape)
-      (processed, rscRs) <- process sysCaps
-      let OptimiseM processed' = peekOptimised processed
-      (processed'', _) <- processed' sysCaps
-      return (processed'', rscRs)
+      return (IntVector vals shape, id)
 
 instance (Foldable t, QC.Arbitrary (t ()))
              => QC.Arbitrary (Optimised Int s t) where
