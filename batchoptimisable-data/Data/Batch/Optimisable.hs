@@ -98,16 +98,16 @@ instance BatchOptimisable Int where
                 }
   peekOptimised (IntVector vals shape)
         = pure . (`SSM.evalState`0) . (`traverse`shape)
-         $ \() -> SSM.state $ \i -> (vals VU.!{-unsafeIndex-} i, i+1)
+         $ \() -> SSM.state $ \i -> (vals `VU.unsafeIndex` i, i+1)
   allocateBatch input = OptimiseM $ \_ -> do
       let n = Foldable.length input
       valV <- VUM.unsafeNew n
       shape <- (`evalStateT`0) . (`traverse`input) $ \x -> do
          i <- get
-         VUM.write{-unsafeWrite-} valV i x
+         VUM.unsafeWrite valV i x
          put $ i+1
          pure ()
-      vals <- VU.freeze{-unsafeFreeze-} valV
+      vals <- VU.unsafeFreeze valV
       return (IntVector vals shape, id)
 
 instance (Foldable t, QC.Arbitrary (t ()))
