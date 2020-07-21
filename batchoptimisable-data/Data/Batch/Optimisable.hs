@@ -36,6 +36,7 @@ import qualified Data.Vector.Unboxed.Mutable as VUM
 
 import Control.Monad
 import Control.Monad.Trans.State.Strict as SSM
+import Control.Arrow (first)
 
 import qualified Test.QuickCheck as QC
 
@@ -46,21 +47,34 @@ data SystemCapabilities = SystemCapabilities
 detectCpuCapabilities :: IO SystemCapabilities
 detectCpuCapabilities = pure SystemCapabilities
 
-newtype OptimiseM a = OptimiseM { runOptimiseM :: SystemCapabilities -> IO a }
+newtype RscReleaseHook = RscReleaseHook { runReleaseHook :: IO () }
+
+type DList a = [a]->[a]
+
+newtype OptimiseM a = OptimiseM {
+      runOptimiseM :: SystemCapabilities -> IO (a, DList RscReleaseHook) }
   deriving (Functor)
 
 instance Applicative OptimiseM where
-  pure = OptimiseM . const . pure
-  OptimiseM fs <*> OptimiseM xs = OptimiseM $ \cpbs -> fs cpbs <*> xs cpbs
+  pure x = OptimiseM . const $ pure (x, id)
+  OptimiseM fs <*> OptimiseM xs
+      = OptimiseM $ \cpbs -> do
+          (f, fRscR) <- fs cpbs
+          (x, xRscR) <- xs cpbs
+          return (f x, fRscR . xRscR)
 instance Monad OptimiseM where
   return = pure
   OptimiseM xs >>= f = OptimiseM $ \cpbs -> do
-     x <- xs cpbs
+     (x, xRscR) <- xs cpbs
      let OptimiseM ys = f x
-     ys cpbs
+     (y, yRscR) <- ys cpbs
+     return (y, xRscR . yRscR)
 
 runWithCapabilities :: SystemCapabilities -> OptimiseM a -> a
-runWithCapabilities cpbs (OptimiseM r) = unsafePerformIO $ r cpbs
+runWithCapabilities cpbs (OptimiseM r) = unsafePerformIO $ do
+    (res, rscRs) <- r cpbs
+    forM_ (rscRs[]) runReleaseHook
+    return res
 
 class BatchOptimisable d where
   data Optimised d (t :: Type->Type) :: Type
@@ -86,8 +100,8 @@ instance BatchOptimisable Int where
          pure ()
       vals <- VU.freeze{-unsafeFreeze-} valV
       let OptimiseM process = f (IntVector vals shape)
-      peekOptimised <$> process sysCaps
-  
+      first peekOptimised <$> process sysCaps
+
 instance (Foldable t, QC.Arbitrary (t ()))
              => QC.Arbitrary (Optimised Int t) where
   arbitrary = do
