@@ -51,18 +51,20 @@ newtype RscReleaseHook = RscReleaseHook { runReleaseHook :: IO () }
 
 type DList a = [a]->[a]
 
-newtype OptimiseM a = OptimiseM {
+type UniqueStateTag = Type
+
+newtype OptimiseM (s :: UniqueStateTag) a = OptimiseM {
       runOptimiseM :: SystemCapabilities -> IO (a, DList RscReleaseHook) }
   deriving (Functor)
 
-instance Applicative OptimiseM where
+instance Applicative (OptimiseM s) where
   pure x = OptimiseM . const $ pure (x, id)
   OptimiseM fs <*> OptimiseM xs
       = OptimiseM $ \cpbs -> do
           (f, fRscR) <- fs cpbs
           (x, xRscR) <- xs cpbs
           return (f x, fRscR . xRscR)
-instance Monad OptimiseM where
+instance Monad (OptimiseM s) where
   return = pure
   OptimiseM xs >>= f = OptimiseM $ \cpbs -> do
      (x, xRscR) <- xs cpbs
@@ -70,25 +72,26 @@ instance Monad OptimiseM where
      (y, yRscR) <- ys cpbs
      return (y, xRscR . yRscR)
 
-runWithCapabilities :: SystemCapabilities -> OptimiseM a -> a
+runWithCapabilities :: SystemCapabilities -> (∀ s . OptimiseM s a) -> a
 runWithCapabilities cpbs (OptimiseM r) = unsafePerformIO $ do
     (res, rscRs) <- r cpbs
     forM_ (rscRs[]) runReleaseHook
     return res
 
 class BatchOptimisable d where
-  data Optimised d (t :: Type->Type) :: Type
-  peekOptimised :: Traversable t => Optimised d t -> t d
+  data Optimised d (s :: UniqueStateTag) (t :: Type->Type) :: Type
+  peekOptimised :: Traversable t => Optimised d s t -> OptimiseM s (t d)
   optimiseBatch :: (Traversable t, BatchOptimisable d')
-     => (Optimised d t -> OptimiseM (Optimised d' t)) -> t d -> OptimiseM (t d')
+     => (Optimised d s t -> OptimiseM s (Optimised d' s t))
+                -> t d -> OptimiseM s (t d')
 
 instance BatchOptimisable Int where
-  data Optimised Int t
+  data Optimised Int s t
     = IntVector { getIntVector :: VU.Vector Int
                 , intVecShape :: t ()
                 }
   peekOptimised (IntVector vals shape)
-        = (`SSM.evalState`0) . (`traverse`shape)
+        = pure . (`SSM.evalState`0) . (`traverse`shape)
          $ \() -> SSM.state $ \i -> (vals VU.!{-unsafeIndex-} i, i+1)
   optimiseBatch f input = OptimiseM $ \sysCaps -> do
       let n = Foldable.length input
@@ -100,10 +103,13 @@ instance BatchOptimisable Int where
          pure ()
       vals <- VU.freeze{-unsafeFreeze-} valV
       let OptimiseM process = f (IntVector vals shape)
-      first peekOptimised <$> process sysCaps
+      (processed, rscRs) <- process sysCaps
+      let OptimiseM processed' = peekOptimised processed
+      (processed'', _) <- processed' sysCaps
+      return (processed'', rscRs)
 
 instance (Foldable t, QC.Arbitrary (t ()))
-             => QC.Arbitrary (Optimised Int t) where
+             => QC.Arbitrary (Optimised Int s t) where
   arbitrary = do
      shape <- QC.arbitrary
      let n = Foldable.length shape
@@ -112,5 +118,5 @@ instance (Foldable t, QC.Arbitrary (t ()))
   shrink = undefined
 
 newtype x//>//y = BatchedFunction
-   { getBatchedFunction :: ∀ t . Traversable t
-       => Optimised x t -> OptimiseM (Optimised y t) }
+   { getBatchedFunction :: ∀ t s . Traversable t
+       => Optimised x s t -> OptimiseM s (Optimised y s t) }
