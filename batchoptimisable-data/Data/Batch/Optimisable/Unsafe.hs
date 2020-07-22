@@ -21,10 +21,11 @@
 module Data.Batch.Optimisable.Unsafe (
    -- * Batch-packed data
      BatchOptimisable(..)
-   , OptimiseM, runWithCapabilities
+   , OptimiseM(..), runWithCapabilities
    -- * System resource bookkeeping
    , SystemCapabilities
    , detectCpuCapabilities
+   , RscReleaseHook(..)
    ) where
 
 import Data.Kind(Type)
