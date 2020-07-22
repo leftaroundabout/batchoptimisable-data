@@ -22,3 +22,4 @@ client_session_key.aes
 *.blg
 dist-newstyle
 .ghc.environ*
+*.swp

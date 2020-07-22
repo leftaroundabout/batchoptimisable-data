@@ -20,6 +20,7 @@ extra-source-files:  CHANGELOG.md
 
 library
   exposed-modules: Data.Batch.Optimisable
+                   Data.Batch.Optimisable.Unsafe
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.10 && <4.14
