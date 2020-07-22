@@ -93,3 +93,11 @@ instance ∀ n t . (KnownNat n, VU.Unbox t, QC.Arbitrary t)
 
 
 type CIntArray n = MultiArray '[n] Int
+
+
+instance (KnownNat n) => BatchOptimisable (MultiArray '[n] Int) where
+  newtype Optimised (MultiArray '[n] Int) s t
+            = PseudoOptdIntArr (t (MultiArray '[n] Int))
+  allocateBatch = pure . PseudoOptdIntArr
+  peekOptimised (PseudoOptdIntArr a) = pure a
+
