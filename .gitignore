@@ -20,3 +20,5 @@ client_session_key.aes
 *.out
 *.bbl
 *.blg
+dist-newstyle
+.ghc.environ*
