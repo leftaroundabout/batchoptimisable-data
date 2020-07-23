@@ -31,10 +31,10 @@ library
   -- hs-source-dirs:
   default-language:    Haskell2010
 
-test-suite tasty
+test-suite tasty-nativeC
   main-is:         test.hs
   type:            exitcode-stdio-1.0
-  hs-source-dirs:  test/tasty
+  hs-source-dirs:  test/tasty-nativeC
   build-depends:   base, batchoptimisable-data
                    , batchoptimisable-data-nativeC
                    , QuickCheck
