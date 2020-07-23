@@ -125,8 +125,8 @@ instance ∀ n . (KnownNat n) => BatchOptimisable (MultiArray '[n] Int) where
       i <- readIORef iSt
       -- doing two copies, but efficiency is not a concern here...
       let aC = VS.map fromIntegral $ VS.convert a :: VS.Vector CInt
-      [C.block| void { memcpy( $vec-ptr:(int* aC)
-                             , $(int* loc) + $(int nArr) * $(int i)
+      [C.block| void { memcpy( $(int* loc) + $(int nArr) * $(int i)
+                             , $vec-ptr:(int* aC)
                              , $(int nArr) * sizeof(int)
                              ); } |]
       modifyIORef iSt (+1)
@@ -139,8 +139,8 @@ instance ∀ n . (KnownNat n) => BatchOptimisable (MultiArray '[n] Int) where
     iSt <- newIORef 0
     peekd <- forM shp $ \() -> do
       i <- readIORef iSt
-      [C.block| void { memcpy( $(int* loc) + $(int nArr) * $(int i)
-                             , $vec-ptr:(int* tgt)
+      [C.block| void { memcpy( $vec-ptr:(int* tgt)
+                             , $(int* loc) + $(int nArr) * $(int i)
                              , $(int nArr) * sizeof(int)
                              ); } |]
       modifyIORef iSt (+1)
