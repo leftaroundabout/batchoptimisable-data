@@ -29,7 +29,7 @@
 module Data.Batch.Optimisable.NativeC (
      module Data.Batch.Optimisable
    -- * Batch-packed data
-   , CIntArray
+   , CIntArray, CLongArray, CFloatArray, CDoubleArray
    ) where
 
 import Data.Batch.Optimisable
@@ -59,7 +59,7 @@ import Control.Monad.Primitive (PrimMonad, PrimState)
 import Data.IORef
 import qualified Language.C.Inline as C
 import Data.Int
-import Foreign.C.Types (CInt)
+import Foreign.C.Types (CInt, CLong, CFloat, CDouble)
 import Foreign (Ptr)
 
 newtype MultiArray (dims :: [Nat]) t
@@ -107,6 +107,9 @@ instance ∀ n t . (KnownNat n, VU.Unbox t, QC.Arbitrary t)
 
 
 type CIntArray n = MultiArray '[n] Int32
+type CLongArray n = MultiArray '[n] Int
+type CFloatArray n = MultiArray '[n] Float
+type CDoubleArray n = MultiArray '[n] Double
 
 C.context (C.baseCtx <> C.vecCtx)
 C.include "<stdlib.h>"
@@ -139,6 +142,45 @@ instance CPortable Int32 where
   type CCType Int32 = CInt -- may be invalid on non-LinuxAMD64
   thawForC = VS.thaw . VS.map fromIntegral . VU.convert
   freezeFromC = fmap (VU.convert . VS.map fromIntegral) . VS.freeze
+
+instance CHandleable CLong where
+  callocArray nElems = [C.exp| long* {calloc($(int nElems), sizeof(long))} |]
+  releaseArray loc = [C.block| void { free ($(long* loc)); } |]
+  memcpyArray (tgt, tOffs) (src, sOffs) nElems
+    = [C.block| void { memcpy( $(long* tgt) + $(int tOffs)
+                             , $(long* src) + $(int sOffs)
+                             , $(int nElems) * sizeof(long)
+                             ); } |]
+instance CPortable Int where
+  type CCType Int = CLong -- may be invalid on non-LinuxAMD64
+  thawForC = VS.thaw . VS.map fromIntegral . VU.convert
+  freezeFromC = fmap (VU.convert . VS.map fromIntegral) . VS.freeze
+
+instance CHandleable CFloat where
+  callocArray nElems = [C.exp| float* {calloc($(int nElems), sizeof(float))} |]
+  releaseArray loc = [C.block| void { free ($(float* loc)); } |]
+  memcpyArray (tgt, tOffs) (src, sOffs) nElems
+    = [C.block| void { memcpy( $(float* tgt) + $(int tOffs)
+                             , $(float* src) + $(int sOffs)
+                             , $(int nElems) * sizeof(float)
+                             ); } |]
+instance CPortable Float where
+  type CCType Float = CFloat
+  thawForC = VS.thaw . VS.map realToFrac . VU.convert
+  freezeFromC = fmap (VU.convert . VS.map realToFrac) . VS.freeze
+
+instance CHandleable CDouble where
+  callocArray nElems = [C.exp| double* {calloc($(int nElems), sizeof(double))} |]
+  releaseArray loc = [C.block| void { free ($(double* loc)); } |]
+  memcpyArray (tgt, tOffs) (src, sOffs) nElems
+    = [C.block| void { memcpy( $(double* tgt) + $(int tOffs)
+                             , $(double* src) + $(int sOffs)
+                             , $(int nElems) * sizeof(double)
+                             ); } |]
+instance CPortable Double where
+  type CCType Double = CDouble
+  thawForC = VS.thaw . VS.map realToFrac . VU.convert
+  freezeFromC = fmap (VU.convert . VS.map realToFrac) . VS.freeze
 
 instance ∀ n t . (KnownNat n, CPortable t)
               => BatchOptimisable (MultiArray '[n] t) where
