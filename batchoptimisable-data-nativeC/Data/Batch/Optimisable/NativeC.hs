@@ -55,6 +55,7 @@ import Control.Arrow (first)
 import qualified Test.QuickCheck as QC
 
 import System.IO.Unsafe
+import Control.Monad.Primitive (PrimMonad, PrimState)
 import Data.IORef
 import qualified Language.C.Inline as C
 import Data.Int
@@ -111,40 +112,63 @@ C.context (C.baseCtx <> C.vecCtx)
 C.include "<stdlib.h>"
 C.include "<string.h>"
 
-instance ∀ n . (KnownNat n) => BatchOptimisable (MultiArray '[n] Int32) where
-  data Optimised (MultiArray '[n] Int32) s t
-            = OptdIntArr { oiaShape :: t ()
-                         , oiaLocation :: Ptr CInt }
+class VS.Storable c => CHandleable c where
+  callocArray :: CInt -> IO (Ptr c)
+  releaseArray :: Ptr c -> IO ()
+  memcpyArray :: (Ptr c, CInt) -- ^ Target, with offset
+              -> (Ptr c, CInt) -- ^ Source, with offset
+              -> CInt          -- ^ Number of elements
+              -> IO ()
+
+class (VU.Unbox t, CHandleable (CCType t)) => CPortable t where
+  type CCType t :: *
+  thawForC :: PrimMonad m
+    => VU.Vector t -> m (VSM.MVector (PrimState m) (CCType t))
+  freezeFromC :: PrimMonad m
+    => VSM.MVector (PrimState m) (CCType t) -> m (VU.Vector t)
+
+instance CHandleable CInt where
+  callocArray nElems = [C.exp| int* {calloc($(int nElems), sizeof(int))} |]
+  releaseArray loc = [C.block| void { free ($(int* loc)); } |]
+  memcpyArray (tgt, tOffs) (src, sOffs) nElems
+    = [C.block| void { memcpy( $(int* tgt) + $(int tOffs)
+                             , $(int* src) + $(int sOffs)
+                             , $(int nElems) * sizeof(int)
+                             ); } |]
+instance CPortable Int32 where
+  type CCType Int32 = CInt -- may be invalid on non-LinuxAMD64
+  thawForC = VS.thaw . VS.map fromIntegral . VU.convert
+  freezeFromC = fmap (VU.convert . VS.map fromIntegral) . VS.freeze
+
+instance ∀ n t . (KnownNat n, CPortable t)
+              => BatchOptimisable (MultiArray '[n] t) where
+  data Optimised (MultiArray '[n] t) s τ
+            = OptdIntArr { oiaShape :: τ ()
+                         , oiaLocation :: Ptr (CCType t) }
   allocateBatch input = OptimiseM $ \_ -> do
     let nArr = nv @n
         nBatch = Foldable.length input
         nElems = nArr * fromIntegral nBatch
-    loc <- [C.exp| int* {calloc($(int nElems), sizeof(int))} |]
-    let release = [C.block| void { free ($(int* loc)); } |]
+    loc <- callocArray nElems
     iSt <- newIORef 0
     shp <- forM input $ \(MultiArray a) -> do
       i <- readIORef iSt
       -- doing two copies, but efficiency is not a concern here...
-      let aC = VS.map fromIntegral $ VS.convert a :: VS.Vector CInt
-      [C.block| void { memcpy( $(int* loc) + $(int nArr) * $(int i)
-                             , $vec-ptr:(int* aC)
-                             , $(int nArr) * sizeof(int)
-                             ); } |]
+      aC <- thawForC a
+      VSM.unsafeWith aC $ \aCP -> memcpyArray (loc, nArr*i) (aCP, 0) nArr
       modifyIORef iSt (+1)
       return ()
     return ( OptdIntArr shp loc
-           , pure $ RscReleaseHook release )
+           , pure $ RscReleaseHook (releaseArray loc) )
   peekOptimised (OptdIntArr shp loc) = OptimiseM $ \_ -> do
     let nArr = nv @n
-    tgt <- VSM.unsafeNew @IO @CInt $ fromIntegral nArr
+    tgt <- VSM.unsafeNew $ fromIntegral nArr
     iSt <- newIORef 0
     peekd <- forM shp $ \() -> do
       i <- readIORef iSt
-      [C.block| void { memcpy( $vec-ptr:(int* tgt)
-                             , $(int* loc) + $(int nArr) * $(int i)
-                             , $(int nArr) * sizeof(int)
-                             ); } |]
+      VSM.unsafeWith tgt $ \tgtP
+            -> memcpyArray (tgtP, 0) (loc, nArr*i) nArr
       modifyIORef iSt (+1)
-      MultiArray . VU.convert . VS.map fromIntegral <$> VS.freeze tgt
+      MultiArray <$> freezeFromC tgt
     return (peekd, mempty)
 
