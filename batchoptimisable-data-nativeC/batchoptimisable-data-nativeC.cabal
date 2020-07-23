@@ -9,6 +9,8 @@ synopsis:            A manually implemented C backend for batchoptimisable-data
 description:         This is intended only as a reference / test ground, demonstrating how
                      <https://hackage.haskell.org/package/batchoptimisable-data batchoptimisable-data>
                      can manage resources without help of the GHC garbage collector.
+                     .
+                     May not work on architectures other than Linux-amd64.
 homepage:            https://github.com/leftaroundabout/batchoptimisable-data
 -- bug-reports:
 license:             GPL-3

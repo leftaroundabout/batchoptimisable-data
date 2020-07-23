@@ -57,6 +57,7 @@ import qualified Test.QuickCheck as QC
 import System.IO.Unsafe
 import Data.IORef
 import qualified Language.C.Inline as C
+import Data.Int
 import Foreign.C.Types (CInt)
 import Foreign (Ptr)
 
@@ -104,14 +105,14 @@ instance ∀ n t . (KnownNat n, VU.Unbox t, QC.Arbitrary t)
                                     $ zipWith (:|) l (QC.shrink<$>l))
 
 
-type CIntArray n = MultiArray '[n] Int
+type CIntArray n = MultiArray '[n] Int32
 
 C.context (C.baseCtx <> C.vecCtx)
 C.include "<stdlib.h>"
 C.include "<string.h>"
 
-instance ∀ n . (KnownNat n) => BatchOptimisable (MultiArray '[n] Int) where
-  data Optimised (MultiArray '[n] Int) s t
+instance ∀ n . (KnownNat n) => BatchOptimisable (MultiArray '[n] Int32) where
+  data Optimised (MultiArray '[n] Int32) s t
             = OptdIntArr { oiaShape :: t ()
                          , oiaLocation :: Ptr CInt }
   allocateBatch input = OptimiseM $ \_ -> do
