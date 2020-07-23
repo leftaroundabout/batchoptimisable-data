@@ -39,6 +39,8 @@ import Control.Monad
 import Control.Monad.Trans.State.Strict as SSM
 import Control.Arrow (first)
 
+import Data.DList (DList)
+
 import qualified Test.QuickCheck as QC
 
 import System.IO.Unsafe
@@ -50,8 +52,6 @@ detectCpuCapabilities = pure SystemCapabilities
 
 newtype RscReleaseHook = RscReleaseHook { runReleaseHook :: IO () }
 
-type DList a = [a]->[a]
-
 type UniqueStateTag = Type
 
 newtype OptimiseM (s :: UniqueStateTag) a = OptimiseM {
@@ -59,24 +59,24 @@ newtype OptimiseM (s :: UniqueStateTag) a = OptimiseM {
   deriving (Functor)
 
 instance Applicative (OptimiseM s) where
-  pure x = OptimiseM . const $ pure (x, id)
+  pure x = OptimiseM . const $ pure (x, mempty)
   OptimiseM fs <*> OptimiseM xs
       = OptimiseM $ \cpbs -> do
           (f, fRscR) <- fs cpbs
           (x, xRscR) <- xs cpbs
-          return (f x, fRscR . xRscR)
+          return (f x, fRscR<>xRscR)
 instance Monad (OptimiseM s) where
   return = pure
   OptimiseM xs >>= f = OptimiseM $ \cpbs -> do
      (x, xRscR) <- xs cpbs
      let OptimiseM ys = f x
      (y, yRscR) <- ys cpbs
-     return (y, xRscR . yRscR)
+     return (y, xRscR<>yRscR)
 
 runWithCapabilities :: SystemCapabilities -> (∀ s . OptimiseM s a) -> a
 runWithCapabilities cpbs (OptimiseM r) = unsafePerformIO $ do
     (res, rscRs) <- r cpbs
-    forM_ (rscRs[]) runReleaseHook
+    forM_ (toList rscRs) runReleaseHook
     return res
 
 class BatchOptimisable d where
@@ -90,7 +90,7 @@ class BatchOptimisable d where
       (xVals, xRscR) <- runOptimiseM (allocateBatch xs) sysCaps
       (yVals, yRscR) <- runOptimiseM (f xVals) sysCaps
       (peekd, _) <- runOptimiseM (peekOptimised yVals) sysCaps
-      return (peekd, xRscR.yRscR)
+      return (peekd, xRscR<>yRscR)
 
 instance BatchOptimisable Int where
   data Optimised Int s t
@@ -109,7 +109,7 @@ instance BatchOptimisable Int where
          put $ i+1
          pure ()
       vals <- VU.unsafeFreeze valV
-      return (IntVector vals shape, id)
+      return (IntVector vals shape, mempty)
 
 instance (Foldable t, QC.Arbitrary (t ()))
              => QC.Arbitrary (Optimised Int s t) where
