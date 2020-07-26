@@ -26,11 +26,7 @@
 {-# LANGUAGE TemplateHaskell      #-}
 
 
-module Data.Batch.Optimisable.NativeC.Internal (
-     module Data.Batch.Optimisable
-   -- * Batch-packed data
-   , CIntArray, CLongArray, CFloatArray, CDoubleArray
-   ) where
+module Data.Batch.Optimisable.NativeC.Internal where
 
 import Data.Batch.Optimisable
 import Data.Batch.Optimisable.Unsafe
