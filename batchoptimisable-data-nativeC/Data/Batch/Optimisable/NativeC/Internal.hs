@@ -101,10 +101,10 @@ transposeRep l = (NE.head <$> l)
        shTail (_:|h:t) = h:|t
 
 
-instance ∀ n t . (KnownNat n, VU.Unbox t, QC.Arbitrary t)
-            => QC.Arbitrary (MultiArray '[n] t) where
-  arbitrary = fromList <$> replicateM (nv @n)
-                                      QC.arbitrary
+instance ∀ dims t . (KnownShape dims, VU.Unbox t, QC.Arbitrary t)
+            => QC.Arbitrary (MultiArray dims t) where
+  arbitrary = MultiArray <$> VU.replicateM (product $ shape @dims)
+                                           QC.arbitrary
   shrink (MultiArray a) = case VU.toList a of
        [] -> []
        l  -> MultiArray . VU.fromList . NE.toList <$>

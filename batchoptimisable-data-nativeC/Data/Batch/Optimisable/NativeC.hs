@@ -11,6 +11,7 @@
 module Data.Batch.Optimisable.NativeC (
      module Data.Batch.Optimisable
    -- * Batch-packed data
+   , MultiArray
    , CIntArray, CLongArray, CFloatArray, CDoubleArray
    ) where
 
