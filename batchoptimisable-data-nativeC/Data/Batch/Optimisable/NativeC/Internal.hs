@@ -72,6 +72,19 @@ newtype MultiArray (dims :: [Nat]) t
   = MultiArray { getFlatIntArray :: VU.Vector t }
  deriving (Eq)
 
+constArray :: ∀ a dims . (VU.Unbox a, KnownShape dims)
+          => a -> MultiArray dims a
+constArray = MultiArray . VU.replicate (product $ shape @dims)
+
+mapArray :: (VU.Unbox a, VU.Unbox b)
+          => (a -> b) -> MultiArray dims a -> MultiArray dims b
+mapArray f (MultiArray v) = MultiArray $ VU.map f v
+
+zipArrayWith :: (VU.Unbox a, VU.Unbox b, VU.Unbox c)
+          => (a -> b -> c)
+            -> MultiArray dims a -> MultiArray dims b -> MultiArray dims c
+zipArrayWith f (MultiArray v) (MultiArray w) = MultiArray $ VU.zipWith f v w
+
 mapMArray :: (VU.Unbox a, VU.Unbox b, Monad f)
           => (a -> f b) -> MultiArray dims a -> f (MultiArray dims b)
 mapMArray f (MultiArray v) = MultiArray <$> VU.mapM f v
