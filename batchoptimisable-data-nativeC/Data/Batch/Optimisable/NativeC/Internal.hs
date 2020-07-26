@@ -215,13 +215,13 @@ instance CPortable Double where
   thawForC = VS.thaw . VS.map realToFrac . VU.convert
   freezeFromC = fmap (VU.convert . VS.map realToFrac) . VS.freeze
 
-instance ∀ n t . (KnownNat n, CPortable t)
-              => BatchOptimisable (MultiArray '[n] t) where
-  data Optimised (MultiArray '[n] t) s τ
+instance ∀ dims t . (KnownShape dims, CPortable t)
+              => BatchOptimisable (MultiArray dims t) where
+  data Optimised (MultiArray dims t) s τ
             = OptdIntArr { oiaShape :: τ ()
                          , oiaLocation :: Ptr (CCType t) }
   allocateBatch input = OptimiseM $ \_ -> do
-    let nArr = nv @n
+    let nArr = fromIntegral . product $ shape @dims
         nBatch = Foldable.length input
         nElems = nArr * fromIntegral nBatch
     loc <- callocArray nElems
@@ -236,7 +236,7 @@ instance ∀ n t . (KnownNat n, CPortable t)
     return ( OptdIntArr shp loc
            , pure $ RscReleaseHook (releaseArray loc) )
   peekOptimised (OptdIntArr shp loc) = OptimiseM $ \_ -> do
-    let nArr = nv @n
+    let nArr = fromIntegral . product $ shape @dims
     tgt <- VSM.unsafeNew $ fromIntegral nArr
     iSt <- newIORef 0
     peekd <- forM shp $ \() -> do
