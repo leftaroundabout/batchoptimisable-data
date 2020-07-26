@@ -58,6 +58,16 @@ import Data.Int
 import Foreign.C.Types (CInt, CLong, CFloat, CDouble)
 import Foreign (Ptr)
 
+
+
+class KnownShape (dims :: [Nat]) where
+  shape :: [Int]
+
+instance KnownShape '[] where
+  shape = []
+instance ∀ n ns . (KnownNat n, KnownShape ns) => KnownShape (n ': ns) where
+  shape = nv @n : shape @ns
+
 newtype MultiArray (dims :: [Nat]) t
   = MultiArray { getFlatIntArray :: VU.Vector t }
  deriving (Eq)
