@@ -79,17 +79,23 @@ mapMArray f (MultiArray v) = MultiArray <$> VU.mapM f v
 nv :: ∀ n i . (KnownNat n, Integral i) => i
 nv = fromInteger $ natVal (Proxy @n)
 
-instance ∀ n t . (KnownNat n, VU.Unbox t)
-        => IsList (MultiArray '[n] t) where
-  type Item (MultiArray '[n] t) = t
-  toList (MultiArray a) = VU.toList a
+instance ∀ n ns t . (KnownNat n, KnownShape ns, VU.Unbox t)
+        => IsList (MultiArray (n ': ns) t) where
+  type Item (MultiArray (n ': ns) t) = MultiArray ns t
+  toList (MultiArray a) = [ MultiArray $ VU.slice (i*nBloc) nBloc a
+                          | i <- [0..n₀-1] ]
+   where n₀ = nv @n
+         nBloc = product $ shape @ns
   fromList l
-    | length l == n  = MultiArray $ VU.fromList l
-   where n = nv @n
+    | length l == n₀  = MultiArray . VU.concat $ getFlatIntArray<$>l
+   where n₀ = nv @n
 
-instance ∀ dims t . ( IsList (MultiArray dims t)
-                    , Show (Item (MultiArray dims t) ) )
-                   => Show (MultiArray dims t) where
+
+instance (Show t, VU.Unbox t) => Show (MultiArray '[] t) where
+  showsPrec p (MultiArray a) = showsPrec p $ a VU.! 0
+instance ∀ n ns t . ( KnownNat n, KnownShape ns, VU.Unbox t
+                    , Show t, Show (MultiArray ns t) )
+                   => Show (MultiArray (n ': ns) t) where
   show = show . GHC.Exts.toList
 
 transposeRep :: NonEmpty (NonEmpty a) -> NonEmpty (NonEmpty a)
