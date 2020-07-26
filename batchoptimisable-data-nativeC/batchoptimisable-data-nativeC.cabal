@@ -24,6 +24,7 @@ extra-source-files:  CHANGELOG.md
 
 library
   exposed-modules:   Data.Batch.Optimisable.NativeC
+                     Data.Batch.Optimisable.NativeC.Internal
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.10 && <4.14
