@@ -25,13 +25,16 @@ extra-source-files:  CHANGELOG.md
 library
   exposed-modules:   Data.Batch.Optimisable.NativeC
                      Data.Batch.Optimisable.NativeC.Internal
-  -- other-modules:
+  other-modules:
+                     Data.Batch.Optimisable.NativeC.Instances
   -- other-extensions:
   build-depends:       base >=4.10 && <4.14
                      , batchoptimisable-data==0.1.0.0
                      , vector, QuickCheck
                      , primitive
                      , inline-c >=0.9 && <0.10
+                     , vector-space, manifolds-core
+                     , linearmap-category >=0.4 && <0.5
   -- hs-source-dirs:
   default-language:    Haskell2010
 
@@ -41,6 +44,7 @@ test-suite tasty-nativeC
   hs-source-dirs:  test/tasty-nativeC
   build-depends:   base, batchoptimisable-data
                    , batchoptimisable-data-nativeC
+                   , vector-space
                    , QuickCheck
                    , tasty, tasty-quickcheck
   ghc-options: -threaded "-with-rtsopts -N8 -M2G"

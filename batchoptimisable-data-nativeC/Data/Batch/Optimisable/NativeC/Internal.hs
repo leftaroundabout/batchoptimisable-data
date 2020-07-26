@@ -70,7 +70,7 @@ instance ∀ n ns . (KnownNat n, KnownShape ns) => KnownShape (n ': ns) where
 
 newtype MultiArray (dims :: [Nat]) t
   = MultiArray { getFlatIntArray :: VU.Vector t }
- deriving (Eq)
+ deriving (Eq, Ord)
 
 constArray :: ∀ a dims . (VU.Unbox a, KnownShape dims)
           => a -> MultiArray dims a
@@ -110,6 +110,14 @@ instance ∀ n ns t . ( KnownNat n, KnownShape ns, VU.Unbox t
                     , Show t, Show (MultiArray ns t) )
                    => Show (MultiArray (n ': ns) t) where
   show = show . GHC.Exts.toList
+
+instance (Num t, VU.Unbox t) => Num (MultiArray '[] t) where
+  fromInteger = constArray . fromInteger
+  abs = mapArray abs
+  signum = mapArray signum
+  negate = mapArray negate
+  (+) = zipArrayWith (+)
+  (*) = zipArrayWith (*)
 
 transposeRep :: NonEmpty (NonEmpty a) -> NonEmpty (NonEmpty a)
 transposeRep l = (NE.head <$> l)

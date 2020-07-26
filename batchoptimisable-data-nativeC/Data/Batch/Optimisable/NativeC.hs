@@ -16,6 +16,7 @@ module Data.Batch.Optimisable.NativeC (
    ) where
 
 import Data.Batch.Optimisable.NativeC.Internal
+import Data.Batch.Optimisable.NativeC.Instances ()
 import Data.Batch.Optimisable
 import Data.Batch.Optimisable.Unsafe
 
