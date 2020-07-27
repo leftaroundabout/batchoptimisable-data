@@ -34,10 +34,13 @@ import Data.AffineSpace
 import Data.AdditiveGroup
 import Data.VectorSpace
 import Math.Manifold.Core.PseudoAffine
+import Math.LinearMap.Category
 
 import qualified Data.Vector.Unboxed as VU
 
 import GHC.TypeLits (KnownNat)
+import Data.Kind (Type)
+import Data.Type.Coercion
 
 
 instance (Fractional t, VU.Unbox t) => Fractional (MultiArray '[] t) where
@@ -119,3 +122,56 @@ instance (InnerSpace t, VU.Unbox t, KnownShape dims, Num (Scalar t))
               => InnerSpace (MultiArray dims t) where
   MultiArray v<.>MultiArray w
     = VU.ifoldl' (\acc i vi -> acc + vi<.>VU.unsafeIndex w i) 0 v
+
+type family (++) (l :: [k]) (m :: [k]) :: [k] where
+  '[] ++ m = m
+  (h ': t) ++ m = h ': (t++m)
+
+--type family MATensorProduct dims t w where
+--  MATensorProduct dims t t = MultiArray dims t
+--  MATensorProduct dims t (MultiArray dims' t) = MultiArray (dims++dims') t
+type MATensorProduct dims t e = [t⊗e]
+
+instance ∀ t dims . ( TensorSpace t, VU.Unbox t, t ~ Needle t
+                    , KnownShape dims, Num (Scalar t) )
+     => TensorSpace (MultiArray dims t) where
+  type TensorProduct (MultiArray dims t) w = MATensorProduct dims t w
+  addTensors (Tensor t) (Tensor u)
+      = Tensor $ zipWith (^+^) t u
+  subtractTensors (Tensor t) (Tensor u)
+      = Tensor $ zipWith (^-^) t u
+  scaleTensor = bilinearFunction $ \μ (Tensor t) -> Tensor $ map (μ*^) t
+  negateTensor = LinearFunction $ \(Tensor t) -> Tensor $ map negateV t
+  wellDefinedVector (MultiArray a)
+      = MultiArray <$> VU.mapM wellDefinedVector a
+  scalarSpaceWitness = case scalarSpaceWitness @t of
+       ScalarSpaceWitness -> ScalarSpaceWitness
+  linearManifoldWitness = case linearManifoldWitness @t of
+       LinearManifoldWitness -> LinearManifoldWitness
+  zeroTensor = Tensor $ replicate (product $ shape @dims) zeroV
+  toFlatTensor = LinearFunction $ \(MultiArray a)
+       -> Tensor $ getLinearFunction toFlatTensor <$> VU.toList a
+  fromFlatTensor = LinearFunction $ \(Tensor t)
+       -> MultiArray . VU.fromList $ getLinearFunction fromFlatTensor<$>t
+  tensorProduct = bilinearFunction $
+       \(MultiArray a) w -> Tensor [ (tensorProduct -+$> ai) -+$> w
+                                   | ai <- VU.toList a ]
+  transposeTensor = LinearFunction $
+       \(Tensor t) -> sumV
+           [ (fmapTensor -+$> LinearFunction (MultiArray .
+               \t -> VU.replicate i zeroV
+                      <> VU.singleton t
+                      <> VU.replicate (n-i-1) zeroV ))
+                -+$> transposeTensor -+$> tw
+           | (i, tw) <- zip [0..] t ]
+   where n = product $ shape @dims
+  fmapTensor = bilinearFunction $ \f (Tensor t)
+      -> Tensor $ getLinearFunction (fmapTensor-+$>f)<$>t
+  fzipTensorWith = bilinearFunction $
+      \f (Tensor mtw, Tensor mtx) -> Tensor $ zipWith
+          (\tw tx -> (fzipTensorWith-+$>f)-+$>(tw,tx)) mtw mtx
+  coerceFmapTensorProduct _ c
+       = case coerceFmapTensorProduct @t [] c of
+           Coercion -> Coercion
+  wellDefinedTensor (Tensor t) = Tensor <$> mapM wellDefinedTensor t
+
