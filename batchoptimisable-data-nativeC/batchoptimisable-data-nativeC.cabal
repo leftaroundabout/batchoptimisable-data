@@ -33,7 +33,7 @@ library
                      , vector, QuickCheck
                      , primitive
                      , inline-c >=0.9 && <0.10
-                     , vector-space, manifolds-core
+                     , vector-space, manifolds-core >=0.6 && <0.7
                      , linearmap-category >=0.4 && <0.5
   -- hs-source-dirs:
   default-language:    Haskell2010

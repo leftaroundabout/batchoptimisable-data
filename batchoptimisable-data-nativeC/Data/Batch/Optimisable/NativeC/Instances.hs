@@ -33,6 +33,7 @@ import Data.Batch.Optimisable.NativeC.Internal
 import Data.AffineSpace
 import Data.AdditiveGroup
 import Data.VectorSpace
+import Math.Manifold.Core.PseudoAffine
 
 import qualified Data.Vector.Unboxed as VU
 
@@ -80,6 +81,22 @@ instance (Integral t, VU.Unbox t) => Integral (MultiArray '[] t) where
        = case quotRem (VU.head n) (VU.head d) of
             (q,r) -> (constArray q, constArray r)
   toInteger (MultiArray n) = toInteger $ VU.head n
+
+instance ∀ t dims .
+      (Semimanifold t, VU.Unbox t, VU.Unbox (Needle t), KnownShape dims)
+              => Semimanifold (MultiArray dims t) where
+  type Needle (MultiArray dims t) = MultiArray dims (Needle t)
+  semimanifoldWitness = case semimanifoldWitness @t of
+     SemimanifoldWitness -> SemimanifoldWitness
+  (.+~^) = zipArrayWith (.+~^)
+
+instance ∀ t dims .
+      (PseudoAffine t, VU.Unbox t, VU.Unbox (Needle t), KnownShape dims)
+              => PseudoAffine (MultiArray dims t) where
+  pseudoAffineWitness = case pseudoAffineWitness @t of
+    PseudoAffineWitness SemimanifoldWitness
+      -> PseudoAffineWitness SemimanifoldWitness
+  (.-~!) = zipArrayWith (.-~!)
 
 instance (AffineSpace t, VU.Unbox t, VU.Unbox (Diff t), KnownShape dims)
               => AffineSpace (MultiArray dims t) where
