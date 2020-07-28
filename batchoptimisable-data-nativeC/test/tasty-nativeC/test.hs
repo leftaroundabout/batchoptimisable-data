@@ -30,6 +30,9 @@ import GHC.Exts (IsList(..))
 import Control.Arrow (first)
 
 
+type T dims = MultiArray dims Double
+type dims++>dims' = T dims +> T dims'
+
 main :: IO ()
 main = do
   cpb <- detectCpuCapabilities
@@ -56,9 +59,27 @@ main = do
       $ \(v :: MultiArray '[7,43,2] Double) -> v^+^zeroV ≈≈≈ v
      , testProperty "Associativity of ^+^"
       $ \(u :: MultiArray '[83] Int) v w -> u^+^(v^+^w) === (u^+^v)^+^w
+     , testProperty "Commutativity of ^+^"
+      $ \(u :: MultiArray '[83] Double) v -> u^+^v ≈≈≈ v^+^u
+     , testProperty "Identity linear map"
+      $ \(f :: '[3,7]++>'[5])
+            -> id . f . id ≈≈≈ f
      , testProperty "Linearity of linear maps"
-      $ \(f :: MultiArray '[5] Double +> MultiArray '[7] Double) v μ w
+      $ \(f :: '[5]++>'[7]) v μ w
             -> (f $ v^+^μ*^w) ≈≈≈ (f $ v) ^+^ μ*^(f $ w)
+     , testProperty "Linear combination of linear maps"
+      $ \f (g :: '[9]++>'[43]) μ v
+            -> (f^+^μ*^g $ v) ≈≈≈ (f $ v) ^+^ μ*^(g $ v)
+     , testProperty "Composition/multiplication of linear maps"
+      $ \(f :: '[4,5]++>'[6]) (g :: '[1,2,3]++>'[4,5]) v
+            -> (f . g $ v) ≈≈≈ (f $ g $ v)
+     , testProperty "Associativity of composition/multiplication"
+      $ \(f :: '[5,6]++>'[7]) (g :: '[2,3,4]++>'[5,6]) (h :: '[9]++>'[2,3,4])
+            -> (f . g) . h ≈≈≈ f . (g . h)
+     , testProperty "Bilinearity of tensor product"
+      $ \u (v :: T '[12]) μ w (x :: T '[13]) ν
+            -> (u^+^μ*^v) ⊗ (w^+^ν*^x)
+                 ≈≈≈ u⊗w ^+^ μ*^(v⊗w) ^+^ ν*^(u⊗x) ^+^ (μ*ν)*^(v⊗x)
      ]
    ]
 

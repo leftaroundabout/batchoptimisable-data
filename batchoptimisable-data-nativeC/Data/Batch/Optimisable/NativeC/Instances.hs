@@ -344,7 +344,34 @@ instance ∀ dims s t w . ( KnownShape dims, QC.Arbitrary (t+>w)
        l  -> LinearMap . map l'2t . NE.toList <$>
                           NE.tail (transposeRep . NE.fromList
                                     $ zipWith (:|) l (QC.shrink<$>l))
+instance ∀ dims t r s
+    . ( KnownShape dims, VU.Unbox t, InnerSpace (t⊗r)
+      , TensorSpace r, Num s
+      , TensorSpace t, Needle t ~ t, VU.Unbox s
+      , Scalar t~s, Scalar r~s )
+              => InnerSpace (Tensor s (MultiArray dims t) r) where
+  Tensor f <.> Tensor g = sum $ zipWith (<.>) f g
+instance ∀ dims t r s
+    . ( KnownShape dims, VU.Unbox t, InnerSpace (t+>r)
+      , TensorSpace r
+      , LinearSpace t, Needle t ~ t, VU.Unbox s, VU.Unbox (DualVector t)
+      , Scalar t~s, Scalar r~s )
+              => InnerSpace (LinearMap s (MultiArray dims t) r) where
+  LinearMap f <.> LinearMap g = sum $ zipWith (<.>) (t2l<$>f :: [t+>r]) (t2l<$>g)
 
+instance ∀ dims t r s
+    . ( KnownShape dims, VU.Unbox t, Eq (t⊗r), Scalar t~s, Scalar r~s )
+              => Eq (Tensor s (MultiArray dims t) r) where
+  Tensor f == Tensor g = f==g
+instance ∀ dims t r s
+    . ( KnownShape dims, VU.Unbox t, Eq (t+>r), Scalar t~s, Scalar r~s )
+              => Eq (LinearMap s (MultiArray dims t) r) where
+  LinearMap f == LinearMap g = (t2l<$>f :: [t+>r])==(t2l<$>g)
+
+instance ( KnownShape dims, Show (MultiArray dims Double)
+         , TensorDecomposable v, Scalar v ~ Double, Show v)
+              => Show (Tensor Double v (MultiArray dims Double)) where
+  showsPrec = tensorDecomposeShowsPrec
 instance ( KnownShape dims
          , FiniteDimensional v, v ~ DualVector v, Scalar v ~ Double, Show v)
               => Show (LinearMap Double v (MultiArray dims Double)) where
