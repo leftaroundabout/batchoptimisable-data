@@ -33,15 +33,23 @@ import Data.Batch.Optimisable.NativeC.Internal
 import Data.AffineSpace
 import Data.AdditiveGroup
 import Data.VectorSpace
+import Data.Basis
 import Math.Manifold.Core.PseudoAffine
 import Math.LinearMap.Category
 
 import qualified Data.Vector.Unboxed as VU
 
+import Control.Monad
+import Control.Arrow (first)
+import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty (NonEmpty(..))
+
 import GHC.TypeLits (KnownNat)
+import GHC.Exts (IsList(..))
 import Data.Kind (Type)
 import Data.Type.Coercion
 
+import qualified Test.QuickCheck as QC
 
 instance (Fractional t, VU.Unbox t) => Fractional (MultiArray '[] t) where
   fromRational = constArray . fromRational
@@ -123,6 +131,37 @@ instance (InnerSpace t, VU.Unbox t, KnownShape dims, Num (Scalar t))
   MultiArray v<.>MultiArray w
     = VU.ifoldl' (\acc i vi -> acc + vi<.>VU.unsafeIndex w i) 0 v
 
+newtype MABasis dims = MABasis Int
+ deriving (Eq)
+instance ∀ dims . (KnownShape dims) => IsList (MABasis dims) where
+  type Item (MABasis dims) = Int
+  fromList l
+    | length l == length shp
+         = MABasis . sum $ zipWith (*) (tail $ scanr (*) 1 shp) l
+   where shp = shape @dims
+  toList (MABasis il) = snd $ go (shape @dims)
+   where go [] = (il,[])
+         go (ld:lds) = case go lds of
+           (il',ixs) -> case il'`divMod`ld of
+                (il'', ix) -> (il'', ix:ixs)
+instance KnownShape dims => Show (MABasis dims) where
+    show = show . toList
+
+instance ∀ dims . KnownShape dims => QC.Arbitrary (MABasis dims) where
+  arbitrary = MABasis <$> QC.choose (0, product $ shape @dims)
+  shrink (MABasis i) = MABasis <$> QC.shrink i
+
+instance (HasBasis t, VU.Unbox t, KnownShape dims, Num (Scalar t))
+              => HasBasis (MultiArray dims t) where
+  type Basis (MultiArray dims t) = (MABasis dims, Basis t)
+  decompose (MultiArray a)
+       = [ ((MABasis i, bt), tj)
+         | i <- allIndices @dims
+         , let t = VU.unsafeIndex a i
+         , (bt, tj) <- decompose t ]
+  decompose' (MultiArray a) (MABasis i, j) = decompose' (VU.unsafeIndex a i) j
+  basisValue (MABasis i, j) = placeAtIndex i $ basisValue j
+
 type family (++) (l :: [k]) (m :: [k]) :: [k] where
   '[] ++ m = m
   (h ': t) ++ m = h ': (t++m)
@@ -140,6 +179,16 @@ allIndices = [0 .. product (shape @dims) - 1]
 --  MATensorProduct dims t t = MultiArray dims t
 --  MATensorProduct dims t (MultiArray dims' t) = MultiArray (dims++dims') t
 type MATensorProduct dims t e = [t⊗e]
+
+l2t :: (v+>w) -> (DualVector v⊗w)
+l2t (LinearMap f) = Tensor f
+
+l'2t :: ∀ v w . LinearSpace v => (DualVector v+>w) -> (v⊗w)
+l'2t = case dualSpaceWitness @v of
+  DualSpaceWitness -> \(LinearMap f) -> Tensor f
+
+t2l :: (DualVector v⊗w) -> (v+>w)
+t2l (Tensor f) = LinearMap f
 
 instance ∀ t dims . ( TensorSpace t, VU.Unbox t, t ~ Needle t
                     , KnownShape dims, Num (Scalar t) )
@@ -225,3 +274,78 @@ instance ∀ t dims . ( LinearSpace t, t ~ Needle t
   applyTensorLinMap = bilinearFunction $ \(LinearMap f) (Tensor ttu)
       -> sumV $ zipWith (\(Tensor tuw) tu ->
                    (applyTensorLinMap-+$>LinearMap tuw)-+$>tu ) f ttu
+
+instance ∀ dims . KnownShape dims
+            => FiniteDimensional (MultiArray dims Double) where
+  data SubBasis (MultiArray dims Double) = MASB
+  entireBasis = MASB
+  enumerateSubBasis MASB
+             = [ placeAtIndex i 1
+               | i <- allIndices @dims ]
+  subbasisDimension MASB = product (shape @dims)
+  decomposeLinMap (LinearMap l) = (MASB, ((getTensorProduct<$>l)++))
+  decomposeLinMapWithin MASB (LinearMap l)
+      = Right ((getTensorProduct<$>l)++)
+  recomposeSB MASB l = case splitAt n l of
+     (lR, r) | length lR == n
+            -> (MultiArray $ VU.fromList lR, r)
+   where n = product $ shape @dims
+  recomposeSBTensor MASB sbw l = first Tensor $ go n l
+   where go nr l
+           | nr<1       = ([], l)
+           | otherwise  = case recomposeSB sbw l of
+               (w, dc') -> first (Tensor w:) $ go (nr-1) dc'
+         n = product $ shape @dims
+  recomposeLinMap MASB l = case splitAt n l of
+     (lR, r) | length lR == n
+            -> (LinearMap $ Tensor<$>lR, r)
+   where n = product $ shape @dims
+  recomposeContraLinMap fw mv
+           = LinearMap [ Tensor . fw $
+                          fmap (\(MultiArray a)->VU.unsafeIndex a i) mv
+                       | i <- allIndices @dims ]
+  uncanonicallyFromDual = LinearFunction id
+  uncanonicallyToDual = LinearFunction id
+
+instance ∀ dims . KnownShape dims
+            => TensorDecomposable (MultiArray dims Double) where
+  tensorDecomposition (Tensor t)
+      = [ ((MABasis i, ()), w)
+        | (i, Tensor w) <- zip [0..] t ]
+  showsPrecBasis = showsPrec
+instance ∀ dims . KnownShape dims
+            => RieszDecomposable (MultiArray dims Double) where
+  rieszDecomposition f
+      = [ ((MABasis i, ()), uncanonicallyFromDual-+$>fromFlatTensor
+                           -+$> (fmapTensor-+$>LinearFunction
+                                  `id` \(MultiArray a) -> VU.unsafeIndex a i)
+                             -+$>l2t f)
+        | i <- allIndices @dims ]
+
+
+
+instance ∀ dims s t w . (KnownShape dims, QC.Arbitrary (t⊗w), s ~ Scalar t)
+    => QC.Arbitrary (Tensor s (MultiArray dims t) w) where
+  arbitrary = Tensor <$> replicateM (product $ shape @dims) QC.arbitrary
+  shrink (Tensor a) = case a of
+       [] -> []
+       l  -> Tensor . NE.toList <$>
+                          NE.tail (transposeRep . NE.fromList
+                                    $ zipWith (:|) l (QC.shrink<$>l))
+instance ∀ dims s t w . ( KnownShape dims, QC.Arbitrary (t+>w)
+                        , LinearSpace t, Scalar t~s )
+    => QC.Arbitrary (LinearMap s (MultiArray dims t) w) where
+  arbitrary = case dualSpaceWitness @t of
+    DualSpaceWitness -> LinearMap <$> replicateM (product $ shape @dims)
+                                                 (l'2t <$> QC.arbitrary)
+  shrink (LinearMap a) = case dualSpaceWitness @t of
+    DualSpaceWitness -> case t2l<$>a of
+       [] -> []
+       l  -> LinearMap . map l'2t . NE.toList <$>
+                          NE.tail (transposeRep . NE.fromList
+                                    $ zipWith (:|) l (QC.shrink<$>l))
+
+instance ( KnownShape dims
+         , FiniteDimensional v, v ~ DualVector v, Scalar v ~ Double, Show v)
+              => Show (LinearMap Double v (MultiArray dims Double)) where
+  showsPrec = rieszDecomposeShowsPrec

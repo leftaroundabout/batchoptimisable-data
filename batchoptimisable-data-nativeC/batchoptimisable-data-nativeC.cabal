@@ -44,7 +44,8 @@ test-suite tasty-nativeC
   hs-source-dirs:  test/tasty-nativeC
   build-depends:   base, batchoptimisable-data
                    , batchoptimisable-data-nativeC
-                   , vector-space
+                   , vector-space, linearmap-category
+                   , constrained-categories
                    , QuickCheck
                    , tasty, tasty-quickcheck
   ghc-options: -threaded "-with-rtsopts -N8 -M2G"
