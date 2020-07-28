@@ -127,6 +127,15 @@ type family (++) (l :: [k]) (m :: [k]) :: [k] where
   '[] ++ m = m
   (h ': t) ++ m = h ': (t++m)
 
+placeAtIndex :: ∀ dims w . (KnownShape dims, AdditiveGroup w, VU.Unbox w)
+                    => Int -> w -> MultiArray dims w
+placeAtIndex i w = MultiArray
+   $ VU.replicate i zeroV <> VU.singleton w <> VU.replicate (n-i-1) zeroV
+ where n = product $ shape @dims
+
+allIndices :: ∀ dims . KnownShape dims => [Int]
+allIndices = [0 .. product (shape @dims) - 1]
+
 --type family MATensorProduct dims t w where
 --  MATensorProduct dims t t = MultiArray dims t
 --  MATensorProduct dims t (MultiArray dims' t) = MultiArray (dims++dims') t
@@ -158,10 +167,7 @@ instance ∀ t dims . ( TensorSpace t, VU.Unbox t, t ~ Needle t
                                    | ai <- VU.toList a ]
   transposeTensor = LinearFunction $
        \(Tensor t) -> sumV
-           [ (fmapTensor -+$> LinearFunction (MultiArray .
-               \t -> VU.replicate i zeroV
-                      <> VU.singleton t
-                      <> VU.replicate (n-i-1) zeroV ))
+           [ (fmapTensor -+$> LinearFunction (placeAtIndex i))
                 -+$> transposeTensor -+$> tw
            | (i, tw) <- zip [0..] t ]
    where n = product $ shape @dims
@@ -175,3 +181,47 @@ instance ∀ t dims . ( TensorSpace t, VU.Unbox t, t ~ Needle t
            Coercion -> Coercion
   wellDefinedTensor (Tensor t) = Tensor <$> mapM wellDefinedTensor t
 
+
+instance ∀ t dims . ( LinearSpace t, t ~ Needle t
+                    , VU.Unbox t, VU.Unbox (DualVector t)
+                    , KnownShape dims
+                    , Num (Scalar t), VU.Unbox (Scalar t) )
+     => LinearSpace (MultiArray dims t) where
+  type DualVector (MultiArray dims t) = MultiArray dims (DualVector t)
+  dualSpaceWitness = case dualSpaceWitness @t of
+      DualSpaceWitness -> case linearManifoldWitness @(DualVector t) of
+         LinearManifoldWitness -> DualSpaceWitness
+  linearId = case dualSpaceWitness @t of
+      DualSpaceWitness ->
+             LinearMap [ (fmapTensor-+$>LinearFunction`id`
+                           placeAtIndex @dims i )
+                          -+$>Tensor(getLinearMap $ linearId @t)
+                       | i <- allIndices @dims
+                       ]
+  applyDualVector = bilinearFunction $
+      \(MultiArray d) (MultiArray v)
+         -> VU.sum $ VU.zipWith ((-+$>).(applyDualVector-+$>)) d v
+  applyLinear = bilinearFunction $
+      \(LinearMap f) (MultiArray v)
+         -> sumV [ (applyLinear @t -+$> LinearMap q) -+$> (v VU.! i)
+                 | (i, Tensor q) <- zip [0..] f ]
+  tensorId = tid
+   where tid :: ∀ w . (LinearSpace w, Scalar w ~ Scalar t)
+             => (MultiArray dims t ⊗ w) +> (MultiArray dims t ⊗ w)
+         tid = case (dualSpaceWitness @t, dualSpaceWitness @w) of
+          (DualSpaceWitness, DualSpaceWitness) -> LinearMap
+           [ (fmapTensor -+$> fmapTensor -+$> LinearFunction`id`
+                \t -> Tensor $ replicate i zeroV
+                                <> [t]
+                                <> replicate (n-i-1) zeroV )
+                 -+$>(Tensor (getLinearMap (tensorId :: (t⊗w)+>(t⊗w)))
+                        :: DualVector t⊗(DualVector w ⊗ (t⊗w)) )
+           | i <- allIndices @dims ]
+         n = product $ shape @dims
+  applyTensorFunctional = bilinearFunction $ \(LinearMap f) (Tensor ttu)
+      -> sum $ zipWith (\(Tensor tu') tu ->
+                   (applyTensorFunctional-+$>LinearMap tu')-+$>tu)
+                                      f ttu
+  applyTensorLinMap = bilinearFunction $ \(LinearMap f) (Tensor ttu)
+      -> sumV $ zipWith (\(Tensor tuw) tu ->
+                   (applyTensorLinMap-+$>LinearMap tuw)-+$>tu ) f ttu
