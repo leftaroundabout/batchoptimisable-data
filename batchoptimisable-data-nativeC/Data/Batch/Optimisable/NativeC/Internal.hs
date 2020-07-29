@@ -12,6 +12,7 @@
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE GADTs                #-}
 {-# LANGUAGE TypeInType           #-}
 {-# LANGUAGE KindSignatures       #-}
 {-# LANGUAGE RankNTypes           #-}
@@ -60,13 +61,30 @@ import Foreign (Ptr)
 
 
 
+type family (++) (l :: [k]) (m :: [k]) :: [k] where
+  '[] ++ m = m
+  (h ': t) ++ m = h ': (t++m)
+
 class KnownShape (dims :: [Nat]) where
   shape :: [Int]
+  tensorShapeKnowledge' :: KnownShape e
+      => Proxy e -> ShapeKnowledge (dims++e)
+
+tensorShapeKnowledge :: ∀ d e . (KnownShape d, KnownShape e)
+                            => ShapeKnowledge (d++e)
+tensorShapeKnowledge = tensorShapeKnowledge' @d @e Proxy
 
 instance KnownShape '[] where
   shape = []
+  tensorShapeKnowledge' _ = ShapeKnowledge
 instance ∀ n ns . (KnownNat n, KnownShape ns) => KnownShape (n ': ns) where
   shape = nv @n : shape @ns
+  tensorShapeKnowledge' p = case tensorShapeKnowledge' @ns p of
+          ShapeKnowledge -> ShapeKnowledge
+
+data ShapeKnowledge (l :: [Nat]) where
+  ShapeKnowledge :: KnownShape l => ShapeKnowledge l
+
 
 newtype MultiArray (dims :: [Nat]) t
   = MultiArray { getFlatIntArray :: VU.Vector t }
@@ -218,7 +236,7 @@ instance CPortable Double where
 instance ∀ dims t . (KnownShape dims, CPortable t)
               => BatchOptimisable (MultiArray dims t) where
   data Optimised (MultiArray dims t) s τ
-            = OptdIntArr { oiaShape :: τ ()
+            = OptdArr { oiaShape :: τ ()
                          , oiaLocation :: Ptr (CCType t) }
   allocateBatch input = OptimiseM $ \_ -> do
     let nArr = fromIntegral . product $ shape @dims
@@ -233,9 +251,9 @@ instance ∀ dims t . (KnownShape dims, CPortable t)
       VSM.unsafeWith aC $ \aCP -> memcpyArray (loc, nArr*i) (aCP, 0) nArr
       modifyIORef iSt (+1)
       return ()
-    return ( OptdIntArr shp loc
+    return ( OptdArr shp loc
            , pure $ RscReleaseHook (releaseArray loc) )
-  peekOptimised (OptdIntArr shp loc) = OptimiseM $ \_ -> do
+  peekOptimised (OptdArr shp loc) = OptimiseM $ \_ -> do
     let nArr = fromIntegral . product $ shape @dims
     tgt <- VSM.unsafeNew $ fromIntegral nArr
     iSt <- newIORef 0

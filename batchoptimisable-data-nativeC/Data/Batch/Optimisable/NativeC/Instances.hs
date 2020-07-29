@@ -162,10 +162,6 @@ instance (HasBasis t, VU.Unbox t, KnownShape dims, Num (Scalar t))
   decompose' (MultiArray a) (MABasis i, j) = decompose' (VU.unsafeIndex a i) j
   basisValue (MABasis i, j) = placeAtIndex i $ basisValue j
 
-type family (++) (l :: [k]) (m :: [k]) :: [k] where
-  '[] ++ m = m
-  (h ': t) ++ m = h ': (t++m)
-
 placeAtIndex :: ∀ dims w . (KnownShape dims, AdditiveGroup w, VU.Unbox w)
                     => Int -> w -> MultiArray dims w
 placeAtIndex i w = MultiArray
