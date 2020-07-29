@@ -28,6 +28,7 @@
 
 module Data.Batch.Optimisable.NativeC.Instances () where
 
+import Data.Batch.Optimisable
 import Data.Batch.Optimisable.NativeC.Internal
 
 import Data.AffineSpace
@@ -372,3 +373,42 @@ instance ( KnownShape dims
          , FiniteDimensional v, v ~ DualVector v, Scalar v ~ Double, Show v)
               => Show (LinearMap Double v (MultiArray dims Double)) where
   showsPrec = rieszDecomposeShowsPrec
+
+compressLinMap :: ∀ d e t . ( KnownShape d, KnownShape e, VU.Unbox t
+                            , TensorProduct (DualVector t) (MultiArray e t)
+                                ~ MultiArray e t )
+      => LinearMap (Scalar t) (MultiArray d t) (MultiArray e t)
+           -> MultiArray (d++e) t
+compressLinMap (LinearMap f) = MultiArray . VU.concat
+          $ getFlatArray . getTensorProduct<$>f
+
+uncompressLinMap :: ∀ d e t . ( KnownShape d, KnownShape e, VU.Unbox t
+                            , TensorProduct (DualVector t) (MultiArray e t)
+                                ~ MultiArray e t )
+    => MultiArray (d++e) t
+      -> LinearMap (Scalar t) (MultiArray d t) (MultiArray e t)
+uncompressLinMap (MultiArray a)
+   = LinearMap [ Tensor . MultiArray
+                   $ VU.unsafeSlice (i*ne) ne a
+               | i <- allIndices @d ]
+ where ne = product $ shape @e
+
+
+instance ∀ d e t s
+         . ( KnownShape d, KnownShape e
+           , CPortable t, Scalar t ~ s
+           , TensorProduct (DualVector t) (MultiArray e t)
+                                ~ MultiArray e t )
+    => BatchOptimisable (LinearMap s (MultiArray d t)
+                                     (MultiArray e t)) where
+  data Optimised (LinearMap s (MultiArray d t)
+                              (MultiArray e t)) σ τ
+        = OptdArrLinMap { getOptLinMapASArr
+              :: Optimised (MultiArray (d++e) t) σ τ }
+  allocateBatch = case tensorShapeKnowledge @d @e of
+    ShapeKnowledge -> \batch
+      -> OptdArrLinMap <$> allocateBatch (compressLinMap <$> batch)
+  peekOptimised = case tensorShapeKnowledge @d @e of
+    ShapeKnowledge -> \(OptdArrLinMap p)
+         -> fmap uncompressLinMap <$> peekOptimised p
+

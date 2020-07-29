@@ -87,7 +87,7 @@ data ShapeKnowledge (l :: [Nat]) where
 
 
 newtype MultiArray (dims :: [Nat]) t
-  = MultiArray { getFlatIntArray :: VU.Vector t }
+  = MultiArray { getFlatArray :: VU.Vector t }
  deriving (Eq, Ord)
 
 constArray :: ∀ a dims . (VU.Unbox a, KnownShape dims)
@@ -118,7 +118,7 @@ instance ∀ n ns t . (KnownNat n, KnownShape ns, VU.Unbox t)
    where n₀ = nv @n
          nBloc = product $ shape @ns
   fromList l
-    | length l == n₀  = MultiArray . VU.concat $ getFlatIntArray<$>l
+    | length l == n₀  = MultiArray . VU.concat $ getFlatArray<$>l
    where n₀ = nv @n
 
 
