@@ -13,6 +13,7 @@
 
 import qualified Prelude as Hask
 import Control.Category.Constrained.Prelude
+import Control.Arrow.Constrained (arr)
 
 import Data.Batch.Optimisable
 import Data.Batch.Optimisable.NativeC
@@ -46,6 +47,13 @@ main = do
       $ \(l :: [CFloatArray 9]) -> runWithCapabilities cpb (optimiseBatch pure l) === l
      , testProperty "C-double arrays"
       $ \(l :: [CDoubleArray 13]) -> runWithCapabilities cpb (optimiseBatch pure l) === l
+     , testProperty "C-double linear maps"
+      $ \(l :: ['[4,3]++>'[4,2,5]])
+            -> runWithCapabilities cpb (optimiseBatch pure l) === l
+     , testProperty "C-double linear functions"
+      $ \(l :: ['[3,2]++>'[4,3]])
+         -> let l' = (applyLinear-+$>) <$> l
+            in (arr<$>runWithCapabilities cpb (optimiseBatch pure $ l')) === l
      ]
    , testGroup "Array indices"
      [ testProperty "List view of basis"

@@ -259,9 +259,19 @@ instance ∀ dims t . (KnownShape dims, CPortable t)
     iSt <- newIORef 0
     peekd <- forM shp $ \() -> do
       i <- readIORef iSt
+      modifyIORef iSt (+1)
       VSM.unsafeWith tgt $ \tgtP
             -> memcpyArray (tgtP, 0) (loc, nArr*i) nArr
-      modifyIORef iSt (+1)
       MultiArray <$> freezeFromC tgt
     return (peekd, mempty)
 
+peekSingleMArrSample :: ∀ dims t s τ
+            . (KnownShape dims, CPortable t)
+              => Optimised (MultiArray dims t) s τ
+                  -> Int -> IO (MultiArray dims t)
+peekSingleMArrSample (OptdArr shp loc) i = do
+    let nArr = fromIntegral . product $ shape @dims
+    tgt <- VSM.unsafeNew $ fromIntegral nArr
+    VSM.unsafeWith tgt $ \tgtP
+          -> memcpyArray (tgtP, 0) (loc, nArr*fromIntegral i) nArr
+    MultiArray <$> freezeFromC tgt

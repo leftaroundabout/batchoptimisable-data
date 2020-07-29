@@ -29,6 +29,7 @@
 module Data.Batch.Optimisable.NativeC.Instances () where
 
 import Data.Batch.Optimisable
+import Data.Batch.Optimisable.Unsafe as DBO (unsafeIO)
 import Data.Batch.Optimisable.NativeC.Internal
 
 import Data.AffineSpace
@@ -38,12 +39,16 @@ import Data.Basis
 import Math.Manifold.Core.PseudoAffine
 import Math.LinearMap.Category
 
+import qualified Data.Vector as VB
 import qualified Data.Vector.Unboxed as VU
 
 import Control.Monad
+import Control.Monad.Trans.State
+import Control.Monad.Trans.Class (lift)
 import Control.Arrow (first)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.Foldable as Fldb
 
 import GHC.TypeLits (KnownNat)
 import GHC.Exts (IsList(..))
@@ -412,3 +417,44 @@ instance ∀ d e t s
     ShapeKnowledge -> \(OptdArrLinMap p)
          -> fmap uncompressLinMap <$> peekOptimised p
 
+instance ∀ d e t s
+         . ( KnownShape d, KnownShape e
+           , CPortable t
+           , Num' t, Scalar t ~ s
+           , TensorProduct (DualVector t) (MultiArray e t)
+                                ~ MultiArray e t )
+    => BatchOptimisable (LinearFunction s (MultiArray d t)
+                                          (MultiArray e t)) where
+  data Optimised (LinearFunction s (MultiArray d t)
+                                   (MultiArray e t)) σ τ
+        = OptdArrLinFunc {
+             olfShape :: τ ()
+           , runOptdLinFunc
+                :: Optimised (MultiArray d t) σ τ
+                  -> OptimiseM σ (Optimised (MultiArray e t) σ τ) }
+  allocateBatch batch = pure . OptdArrLinFunc (const()<$>batch)
+           $ \a -> do
+       inputs <- peekOptimised a
+       outputs <- (`evalStateT`Fldb.toList batch) . forM inputs $ \x -> do
+             (f:fs) <- get
+             put fs
+             return $ f -+$> x
+       allocateBatch outputs
+  peekOptimised = case ( linearManifoldWitness @t
+                       , closedScalarWitness @t
+                       , trivialTensorWitness @t ) of
+   (LinearManifoldWitness, ClosedScalarWitness, TrivialTensorWitness)
+            -> \(OptdArrLinFunc shp fs) -> do
+     outputBatches <- forM (allIndices @d) $ \i -> do
+        let inputArr = placeAtIndex i 1
+        inputBatch <- allocateBatch $ const inputArr <$> shp
+        fs inputBatch
+     (`evalStateT`0) . forM shp . const $ do
+        j <- get
+        put $ j+1
+        lift $ do
+          let ne = product $ shape @e
+          relevantResults <- forM outputBatches $ \batchR -> do
+            batchR' <- DBO.unsafeIO $ peekSingleMArrSample batchR j
+            return $ Tensor batchR'
+          return $ applyLinear-+$>LinearMap relevantResults

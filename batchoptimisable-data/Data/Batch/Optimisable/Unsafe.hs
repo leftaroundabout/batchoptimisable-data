@@ -15,13 +15,14 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE UnicodeSyntax       #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE DeriveFunctor       #-}
 
 
 module Data.Batch.Optimisable.Unsafe (
    -- * Batch-packed data
      BatchOptimisable(..)
-   , OptimiseM(..), runWithCapabilities
+   , OptimiseM(..), runWithCapabilities, unsafeIO
    -- * System resource bookkeeping
    , SystemCapabilities
    , detectCpuCapabilities
@@ -86,6 +87,9 @@ runWithCapabilities cpbs (OptimiseM r) = unsafePerformIO $ do
     (res, rscRs) <- r cpbs
     forM_ (toList rscRs) runReleaseHook
     return res
+
+unsafeIO :: IO a -> OptimiseM s a
+unsafeIO = OptimiseM . const . fmap (,mempty)
 
 class BatchOptimisable d where
   data Optimised d (s :: UniqueStateTag) (t :: Type->Type) :: Type
