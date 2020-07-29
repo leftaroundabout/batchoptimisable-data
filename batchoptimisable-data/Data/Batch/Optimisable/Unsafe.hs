@@ -45,6 +45,7 @@ import Data.DList (DList)
 import qualified Test.QuickCheck as QC
 
 import System.IO.Unsafe
+import Control.Exception (bracketOnError)
 
 data SystemCapabilities = SystemCapabilities
 
@@ -64,14 +65,18 @@ instance Applicative (OptimiseM s) where
   OptimiseM fs <*> OptimiseM xs
       = OptimiseM $ \cpbs -> do
           (f, fRscR) <- fs cpbs
-          (x, xRscR) <- xs cpbs
+          (x, xRscR) <- bracketOnError (pure())
+                      (const $ forM_ (toList fRscR) runReleaseHook)
+                      (const $ xs cpbs)
           return (f x, fRscR<>xRscR)
 instance Monad (OptimiseM s) where
   return = pure
   OptimiseM xs >>= f = OptimiseM $ \cpbs -> do
      (x, xRscR) <- xs cpbs
      let OptimiseM ys = f x
-     (y, yRscR) <- ys cpbs
+     (y, yRscR) <- bracketOnError (pure())
+                 (const $ forM_ (toList xRscR) runReleaseHook)
+                 (const $ ys cpbs)
      return (y, xRscR<>yRscR)
 instance MonadFail (OptimiseM s) where
   fail = OptimiseM . const . Control.Monad.Fail.fail
