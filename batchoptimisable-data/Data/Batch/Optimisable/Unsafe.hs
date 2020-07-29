@@ -36,6 +36,7 @@ import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector.Unboxed.Mutable as VUM
 
 import Control.Monad
+import Control.Monad.Fail
 import Control.Monad.Trans.State.Strict as SSM
 import Control.Arrow (first)
 
@@ -72,6 +73,8 @@ instance Monad (OptimiseM s) where
      let OptimiseM ys = f x
      (y, yRscR) <- ys cpbs
      return (y, xRscR<>yRscR)
+instance MonadFail (OptimiseM s) where
+  fail = OptimiseM . const . Control.Monad.Fail.fail
 
 runWithCapabilities :: SystemCapabilities -> (∀ s . OptimiseM s a) -> a
 runWithCapabilities cpbs (OptimiseM r) = unsafePerformIO $ do
