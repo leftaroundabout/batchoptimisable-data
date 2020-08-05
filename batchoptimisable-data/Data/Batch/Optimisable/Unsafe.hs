@@ -9,6 +9,7 @@
 -- 
 
 {-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeInType          #-}
 {-# LANGUAGE KindSignatures      #-}
@@ -31,10 +32,14 @@ module Data.Batch.Optimisable.Unsafe (
 
 import Data.Kind(Type)
 import Data.Traversable
+import Control.Lens.Indexed (TraversableWithIndex(..))
 import Data.Foldable as Foldable
 
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector.Unboxed.Mutable as VUM
+import qualified Data.Vector.Unboxed.Mutable as VUM
+import qualified Data.HashMap.Strict as HM
+import Data.Hashable (Hashable)
 
 import Control.Monad
 import Control.Monad.Fail
@@ -91,11 +96,23 @@ runWithCapabilities cpbs (OptimiseM r) = unsafePerformIO $ do
 unsafeIO :: IO a -> OptimiseM s a
 unsafeIO = OptimiseM . const . fmap (,mempty)
 
+class (TraversableWithIndex (IndexOf t) t, Hashable (IndexOf t), Eq (IndexOf t))
+         => RATraversable t where
+  type IndexOf t :: Type
+
+instance RATraversable [] where
+  type IndexOf [] = Int
+
+
 class BatchOptimisable d where
   data Optimised d (s :: UniqueStateTag) (t :: Type->Type) :: Type
-  allocateBatch :: Traversable t => t d -> OptimiseM s (Optimised d s t)
-  peekOptimised :: Traversable t => Optimised d s t -> OptimiseM s (t d)
-  optimiseBatch :: (Traversable t, BatchOptimisable d')
+  allocateBatch :: RATraversable t
+      => t d -> OptimiseM s (Optimised d s t)
+  peekOptimised :: RATraversable t
+      => Optimised d s t -> OptimiseM s (t d)
+  peekSingleSample :: RATraversable t
+      => IndexOf t -> Optimised d s t -> OptimiseM s (Maybe d)
+  optimiseBatch :: (RATraversable t, BatchOptimisable d')
      => (Optimised d s t -> OptimiseM s (Optimised d' s t))
                 -> t d -> OptimiseM s (t d')
   optimiseBatch f xs = OptimiseM $ \sysCaps -> do
@@ -108,30 +125,35 @@ instance BatchOptimisable Int where
   data Optimised Int s t
     = IntVector { getIntVector :: VU.Vector Int
                 , intVecShape :: t ()
+                , intVecIndices :: HM.HashMap (IndexOf t) Int
                 }
-  peekOptimised (IntVector vals shape)
+  peekOptimised (IntVector vals shape ixs)
         = pure . (`SSM.evalState`0) . (`traverse`shape)
          $ \() -> SSM.state $ \i -> (vals `VU.unsafeIndex` i, i+1)
+  peekSingleSample ix (IntVector vals shape ixs)
+        = pure . fmap (VU.unsafeIndex vals) $ HM.lookup ix ixs
   allocateBatch input = OptimiseM $ \_ -> do
       let n = Foldable.length input
       valV <- VUM.unsafeNew n
-      shape <- (`evalStateT`0) . (`traverse`input) $ \x -> do
-         i <- get
+      (shape, (_,ixs))
+             <- (`runStateT`(0, HM.empty)) . (`itraverse`input) $ \ix x -> do
+         (i, oldixs) <- get
          VUM.unsafeWrite valV i x
-         put $ i+1
+         put (i+1, HM.insert ix i oldixs)
          pure ()
       vals <- VU.unsafeFreeze valV
-      return (IntVector vals shape, mempty)
+      return (IntVector vals shape ixs, mempty)
 
-instance (Foldable t, QC.Arbitrary (t ()))
+instance (RATraversable t, QC.Arbitrary (t ()))
              => QC.Arbitrary (Optimised Int s t) where
   arbitrary = do
      shape <- QC.arbitrary
      let n = Foldable.length shape
      values <- replicateM n QC.arbitrary
-     return $ IntVector (VU.fromList values) shape
+     let (_,ixs) = (`execState`(0,HM.empty)) . (`itraverse`shape) $ \ix () -> do
+          (i, oldixs) <- get
+          put (i+1, HM.insert ix i oldixs) 
+          pure ()
+     return $ IntVector (VU.fromList values) shape ixs
   shrink = undefined
 
-newtype x//>//y = BatchedFunction
-   { getBatchedFunction :: ∀ t s . Traversable t
-       => Optimised x s t -> OptimiseM s (Optimised y s t) }
