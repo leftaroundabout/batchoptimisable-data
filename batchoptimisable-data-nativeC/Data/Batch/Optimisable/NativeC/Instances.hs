@@ -465,9 +465,9 @@ instance ∀ d w t s
      outputBatches <- forM (allIndices @d) $ \i -> do
         let inputArr = placeAtIndex i 1
         inputBatch <- allocateBatch $ const inputArr <$> shp
-        fs inputBatch
-     (`itraverse`shp) $ \j _ -> do
-          relevantResults <- forM outputBatches $ \batchR -> do
-            Just batchR' <- peekSingleSample batchR j
-            return $ Tensor batchR'
+        outputBatch <- fs inputBatch
+        Fldb.toList <$> peekOptimised outputBatch
+     (`evalStateT`outputBatches) . (`traverse`shp) $ \() -> do
+          relevantResults <- map (Tensor . head)<$>get
+          modify $ map tail
           return $ applyLinear-+$>LinearMap relevantResults
