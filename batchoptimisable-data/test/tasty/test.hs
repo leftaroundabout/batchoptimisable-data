@@ -22,12 +22,6 @@ main = do
   defaultMain $ testGroup "Tests"
    [ testProperty "Retrieve optimised integer list"
      $ \(l :: [Int]) -> runWithCapabilities cpb (optimiseBatch pure l) === l
-   , testProperty "Retrieve single indices"
-     $ \(l :: [Int]) i -> runWithCapabilities cpb (do
-                            optd <- allocateBatch l
-                            peekSingleSample optd i)
-                           === if i>=0 && i<length l then Just (l!!i)
-                                                     else Nothing
    ]
 
 

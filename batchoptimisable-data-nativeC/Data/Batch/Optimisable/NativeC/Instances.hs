@@ -414,9 +414,6 @@ instance ∀ d e t s
   allocateBatch = case tensorShapeKnowledge @d @e of
     ShapeKnowledge -> \batch
       -> OptdArrLinMap <$> allocateBatch (compressLinMap <$> batch)
-  peekSingleSample = case tensorShapeKnowledge @d @e of
-    ShapeKnowledge -> \(OptdArrLinMap p) j
-      -> fmap uncompressLinMap <$> peekSingleSample p j
   peekOptimised = case tensorShapeKnowledge @d @e of
     ShapeKnowledge -> \(OptdArrLinMap p)
          -> fmap uncompressLinMap <$> peekOptimised p
@@ -442,21 +439,6 @@ instance ∀ d w t s
              put fs
              return $ f -+$> x
        allocateBatch outputs
-  peekSingleSample = case ( linearManifoldWitness @t
-                       , closedScalarWitness @t
-                       , trivialTensorWitness @t ) of
-   (LinearManifoldWitness, ClosedScalarWitness, TrivialTensorWitness)
-            -> \(OptdArrLinFunc shp fs) j -> do
-     outputBatches <- forM (allIndices @d) $ \i -> do
-        let inputArr = placeAtIndex i 1
-        inputBatch <- allocateBatch $ const inputArr <$> shp
-        fs inputBatch  -- This is really inefficient: we're running the function
-                       -- for a whole batch, but only extract a single result.
-                       -- Not sure if there's a better alternative.
-     relevantResults <- forM outputBatches $ \batchR -> do
-       Just batchR' <- peekSingleSample batchR j
-       return $ Tensor batchR'
-     return . Just $ applyLinear-+$>LinearMap relevantResults
   peekOptimised = case ( linearManifoldWitness @t
                        , closedScalarWitness @t
                        , trivialTensorWitness @t ) of
