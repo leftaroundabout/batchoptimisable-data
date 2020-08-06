@@ -111,7 +111,7 @@ class BatchOptimisable d where
   peekOptimised :: RATraversable t
       => Optimised d s t -> OptimiseM s (t d)
   peekSingleSample :: RATraversable t
-      => IndexOf t -> Optimised d s t -> OptimiseM s (Maybe d)
+      => Optimised d s t -> IndexOf t -> OptimiseM s (Maybe d)
   optimiseBatch :: (RATraversable t, BatchOptimisable d')
      => (Optimised d s t -> OptimiseM s (Optimised d' s t))
                 -> t d -> OptimiseM s (t d')
@@ -130,7 +130,7 @@ instance BatchOptimisable Int where
   peekOptimised (IntVector vals shape ixs)
         = pure . (`SSM.evalState`0) . (`traverse`shape)
          $ \() -> SSM.state $ \i -> (vals `VU.unsafeIndex` i, i+1)
-  peekSingleSample ix (IntVector vals shape ixs)
+  peekSingleSample (IntVector vals shape ixs) ix
         = pure . fmap (VU.unsafeIndex vals) $ HM.lookup ix ixs
   allocateBatch input = OptimiseM $ \_ -> do
       let n = Foldable.length input

@@ -25,7 +25,7 @@ main = do
    , testProperty "Retrieve single indices"
      $ \(l :: [Int]) i -> runWithCapabilities cpb (do
                             optd <- allocateBatch l
-                            peekSingleSample i optd)
+                            peekSingleSample optd i)
                            === if i>=0 && i<length l then Just (l!!i)
                                                      else Nothing
    ]
