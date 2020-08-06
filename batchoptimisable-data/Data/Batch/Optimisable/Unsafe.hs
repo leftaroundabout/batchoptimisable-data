@@ -44,12 +44,14 @@ import Data.Hashable (Hashable)
 import Control.Monad
 import Control.Monad.Fail
 import Control.Monad.Trans.State.Strict as SSM
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Arrow (first)
 
 import Data.DList (DList)
 
 import qualified Test.QuickCheck as QC
 
+import Data.IORef
 import System.IO.Unsafe
 import Control.Exception (bracketOnError)
 
@@ -108,6 +110,9 @@ class BatchOptimisable d where
   data Optimised d (s :: UniqueStateTag) (t :: Type->Type) :: Type
   allocateBatch :: RATraversable t
       => t d -> OptimiseM s (Optimised d s t)
+  traverseOptimisedT :: (Traversable t, MonadTrans f, Monad (f (OptimiseM s)))
+                          => (d -> f (OptimiseM s) y)
+                                -> Optimised d s t -> f (OptimiseM s) (t y)
   peekOptimised :: RATraversable t
       => Optimised d s t -> OptimiseM s (t d)
   peekSingleSample :: RATraversable t
@@ -132,6 +137,14 @@ instance BatchOptimisable Int where
          $ \() -> SSM.state $ \i -> (vals `VU.unsafeIndex` i, i+1)
   peekSingleSample (IntVector vals shape ixs) ix
         = pure . fmap (VU.unsafeIndex vals) $ HM.lookup ix ixs
+  traverseOptimisedT f (IntVector vals shape _) = do
+      iSt <- lift . unsafeIO $ newIORef 0
+      forM shape $ \() -> do
+        i <- lift . unsafeIO $ do
+           i <- readIORef iSt
+           modifyIORef iSt (+1)
+           return i
+        f $ VU.unsafeIndex vals i
   allocateBatch input = OptimiseM $ \_ -> do
       let n = Foldable.length input
       valV <- VUM.unsafeNew n
