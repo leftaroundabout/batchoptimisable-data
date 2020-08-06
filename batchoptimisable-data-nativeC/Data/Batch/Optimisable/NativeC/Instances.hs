@@ -43,6 +43,7 @@ import qualified Data.Vector as VB
 import qualified Data.Vector.Unboxed as VU
 
 import Control.Monad
+import Control.Lens.Indexed (TraversableWithIndex(..))
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Class (lift)
 import Control.Arrow (first)
@@ -417,21 +418,19 @@ instance ∀ d e t s
     ShapeKnowledge -> \(OptdArrLinMap p)
          -> fmap uncompressLinMap <$> peekOptimised p
 
-instance ∀ d e t s
-         . ( KnownShape d, KnownShape e
+instance ∀ d w t s
+         . ( KnownShape d
            , CPortable t
+           , TensorSpace w, BatchOptimisable w, Scalar w ~ t
            , Num' t, Scalar t ~ s
-           , TensorProduct (DualVector t) (MultiArray e t)
-                                ~ MultiArray e t )
-    => BatchOptimisable (LinearFunction s (MultiArray d t)
-                                          (MultiArray e t)) where
-  data Optimised (LinearFunction s (MultiArray d t)
-                                   (MultiArray e t)) σ τ
+           , TensorProduct (DualVector t) w ~ w )
+    => BatchOptimisable (LinearFunction s (MultiArray d t) w) where
+  data Optimised (LinearFunction s (MultiArray d t) w) σ τ
         = OptdArrLinFunc {
              olfShape :: τ ()
            , runOptdLinFunc
                 :: Optimised (MultiArray d t) σ τ
-                  -> OptimiseM σ (Optimised (MultiArray e t) σ τ) }
+                  -> OptimiseM σ (Optimised w σ τ) }
   allocateBatch batch = pure . OptdArrLinFunc (const()<$>batch)
            $ \a -> do
        inputs <- peekOptimised a
@@ -449,12 +448,8 @@ instance ∀ d e t s
         let inputArr = placeAtIndex i 1
         inputBatch <- allocateBatch $ const inputArr <$> shp
         fs inputBatch
-     (`evalStateT`0) . forM shp . const $ do
-        j <- get
-        put $ j+1
-        lift $ do
-          let ne = product $ shape @e
+     (`itraverse`shp) $ \j _ -> do
           relevantResults <- forM outputBatches $ \batchR -> do
-            batchR' <- DBO.unsafeIO $ peekSingleMArrSample batchR j
+            Just batchR' <- peekSingleSample batchR j
             return $ Tensor batchR'
           return $ applyLinear-+$>LinearMap relevantResults

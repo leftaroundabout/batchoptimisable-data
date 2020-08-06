@@ -24,6 +24,8 @@ module Data.Batch.Optimisable.Unsafe (
    -- * Batch-packed data
      BatchOptimisable(..)
    , OptimiseM(..), runWithCapabilities, unsafeIO
+   -- ** Batch containers
+   , RATraversable(..), itraverse
    -- * System resource bookkeeping
    , SystemCapabilities
    , detectCpuCapabilities

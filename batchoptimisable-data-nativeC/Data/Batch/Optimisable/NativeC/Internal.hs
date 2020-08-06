@@ -23,6 +23,7 @@
 {-# LANGUAGE AllowAmbiguousTypes  #-}
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE QuasiQuotes          #-}
 {-# LANGUAGE TemplateHaskell      #-}
 
@@ -45,6 +46,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector.Storable as VS
 import qualified Data.Vector.Storable.Mutable as VSM
+import qualified Data.HashMap.Strict as HM
 
 import Control.Monad
 import Control.Arrow (first)
@@ -237,23 +239,36 @@ instance ∀ dims t . (KnownShape dims, CPortable t)
               => BatchOptimisable (MultiArray dims t) where
   data Optimised (MultiArray dims t) s τ
             = OptdArr { oiaShape :: τ ()
-                         , oiaLocation :: Ptr (CCType t) }
+                      , oiaIndices :: HM.HashMap (IndexOf τ) CInt
+                      , oiaLocation :: Ptr (CCType t) }
   allocateBatch input = OptimiseM $ \_ -> do
     let nArr = fromIntegral . product $ shape @dims
         nBatch = Foldable.length input
         nElems = nArr * fromIntegral nBatch
     loc <- callocArray nElems
     iSt <- newIORef 0
-    shp <- forM input $ \(MultiArray a) -> do
+    ixsSt <- newIORef HM.empty
+    shp <- (`itraverse`input) $ \ix (MultiArray a) -> do
       i <- readIORef iSt
       -- doing two copies, but efficiency is not a concern here...
       aC <- thawForC a
       VSM.unsafeWith aC $ \aCP -> memcpyArray (loc, nArr*i) (aCP, 0) nArr
       modifyIORef iSt (+1)
+      modifyIORef ixsSt $ HM.insert ix i
       return ()
-    return ( OptdArr shp loc
+    ixs <- readIORef ixsSt
+    return ( OptdArr shp ixs loc
            , pure $ RscReleaseHook (releaseArray loc) )
-  peekOptimised (OptdArr shp loc) = OptimiseM $ \_ -> do
+  peekSingleSample (OptdArr shp ixs loc) ix
+      = case HM.lookup ix ixs of
+          Nothing -> pure Nothing
+          Just i -> OptimiseM $ \_ -> (, mempty) . Just <$> do 
+            let nArr = fromIntegral . product $ shape @dims
+            tgt <- VSM.unsafeNew $ fromIntegral nArr
+            VSM.unsafeWith tgt $ \tgtP
+                  -> memcpyArray (tgtP, 0) (loc, nArr*fromIntegral i) nArr
+            MultiArray <$> freezeFromC tgt
+  peekOptimised (OptdArr shp _ loc) = OptimiseM $ \_ -> do
     let nArr = fromIntegral . product $ shape @dims
     tgt <- VSM.unsafeNew $ fromIntegral nArr
     iSt <- newIORef 0
@@ -265,13 +280,3 @@ instance ∀ dims t . (KnownShape dims, CPortable t)
       MultiArray <$> freezeFromC tgt
     return (peekd, mempty)
 
-peekSingleMArrSample :: ∀ dims t s τ
-            . (KnownShape dims, CPortable t)
-              => Optimised (MultiArray dims t) s τ
-                  -> Int -> IO (MultiArray dims t)
-peekSingleMArrSample (OptdArr shp loc) i = do
-    let nArr = fromIntegral . product $ shape @dims
-    tgt <- VSM.unsafeNew $ fromIntegral nArr
-    VSM.unsafeWith tgt $ \tgtP
-          -> memcpyArray (tgtP, 0) (loc, nArr*fromIntegral i) nArr
-    MultiArray <$> freezeFromC tgt
