@@ -43,6 +43,7 @@ import Data.Hashable (Hashable)
 
 import Control.Monad
 import Control.Monad.Fail
+import Control.Monad.Trans.Identity
 import Control.Monad.Trans.State.Strict as SSM
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Arrow (first)
@@ -113,6 +114,10 @@ class BatchOptimisable d where
   traverseOptimisedT :: (Traversable t, MonadTrans f, Monad (f (OptimiseM s)))
                           => (d -> f (OptimiseM s) y)
                                 -> Optimised d s t -> f (OptimiseM s) (t y)
+  traverseOptimised :: (Traversable t)
+                          => (d -> OptimiseM s y)
+                                -> Optimised d s t -> OptimiseM s (t y)
+  traverseOptimised f = runIdentityT . traverseOptimisedT (IdentityT . f)
   peekOptimised :: RATraversable t
       => Optimised d s t -> OptimiseM s (t d)
   peekSingleSample :: RATraversable t
