@@ -8,29 +8,27 @@
 -- Portability : portable
 -- 
 
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeInType           #-}
-{-# LANGUAGE KindSignatures       #-}
-{-# LANGUAGE RankNTypes           #-}
-{-# LANGUAGE UnicodeSyntax        #-}
-{-# LANGUAGE TypeOperators        #-}
-{-# LANGUAGE DeriveFunctor        #-}
-{-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE AllowAmbiguousTypes  #-}
-{-# LANGUAGE TypeApplications     #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE QuasiQuotes          #-}
-{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeInType            #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE UnicodeSyntax         #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE AllowAmbiguousTypes   #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE InstanceSigs          #-}
 
 
 module Data.Batch.Optimisable.NativeC.Instances () where
 
 import Data.Batch.Optimisable
-import Data.Batch.Optimisable.Unsafe as DBO (unsafeIO)
 import Data.Batch.Optimisable.NativeC.Internal
+import Data.Batch.Optimisable.LinearMaps
 
 import Data.AffineSpace
 import Data.AdditiveGroup
@@ -39,21 +37,16 @@ import Data.Basis
 import Math.Manifold.Core.PseudoAffine
 import Math.LinearMap.Category
 
-import qualified Data.Vector as VB
 import qualified Data.Vector.Unboxed as VU
 
 import Control.Monad
-import Control.Lens.Indexed (TraversableWithIndex(..))
 import Control.Monad.Trans.State
-import Control.Monad.Trans.Class (lift)
 import Control.Arrow (first)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Foldable as Fldb
 
-import GHC.TypeLits (KnownNat)
 import GHC.Exts (IsList(..))
-import Data.Kind (Type)
 import Data.Type.Coercion
 
 import qualified Test.QuickCheck as QC
@@ -418,32 +411,19 @@ instance ∀ d e t s
     ShapeKnowledge -> \(OptdArrLinMap p)
          -> fmap uncompressLinMap <$> peekOptimised p
 
-instance ∀ d w t s
-         . ( KnownShape d
-           , CPortable t
-           , TensorSpace w, BatchOptimisable w, Scalar w ~ t
-           , Num' t, Scalar t ~ s
-           , TensorProduct (DualVector t) w ~ w )
-    => BatchOptimisable (LinearFunction s (MultiArray d t) w) where
-  data Optimised (LinearFunction s (MultiArray d t) w) σ τ
-        = OptdArrLinFunc {
-             olfShape :: τ ()
-           , runOptdLinFunc
-                :: Optimised (MultiArray d t) σ τ
-                  -> OptimiseM σ (Optimised w σ τ) }
-  allocateBatch batch = pure . OptdArrLinFunc (const()<$>batch)
-           $ \a -> do
-       inputs <- peekOptimised a
-       outputs <- (`evalStateT`Fldb.toList batch) . forM inputs $ \x -> do
-             (f:fs) <- get
-             put fs
-             return $ f -+$> x
-       allocateBatch outputs
-  peekOptimised = case ( linearManifoldWitness @t
-                       , closedScalarWitness @t
-                       , trivialTensorWitness @t ) of
+
+instance ∀ d t s . ( KnownShape d, Num' t, CPortable t, CPortable (DualVector t)
+                   , CPortable s, LinearSpace t, Needle t ~ t, Scalar t ~ s )
+   => BatchableLinFuns s (MultiArray d t) where
+  sampleLinFunBatch :: ∀ w σ τ
+        . (Traversable τ, BatchOptimisable w)
+        => Optimised (LinearFunction s (MultiArray d t) w) σ τ
+           -> OptimiseM σ (τ (LinearMap s (MultiArray d t) w))
+  sampleLinFunBatch = case ( linearManifoldWitness @t
+                           , closedScalarWitness @t
+                           , trivialTensorWitness @t @w ) of
    (LinearManifoldWitness, ClosedScalarWitness, TrivialTensorWitness)
-            -> \(OptdArrLinFunc shp fs) -> do
+            -> \(LinFuncOptdBatch shp fs) -> do
      outputBatches <- forM (allIndices @d) $ \i -> do
         let inputArr = placeAtIndex i 1
         inputBatch <- allocateBatch $ const inputArr <$> shp
@@ -452,4 +432,5 @@ instance ∀ d w t s
      (`evalStateT`outputBatches) . (`traverse`shp) $ \() -> do
           relevantResults <- map (Tensor . head)<$>get
           modify $ map tail
-          return $ applyLinear-+$>LinearMap relevantResults
+          return $ LinearMap relevantResults
+
