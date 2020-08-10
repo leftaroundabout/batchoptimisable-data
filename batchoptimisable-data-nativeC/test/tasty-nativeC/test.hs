@@ -54,6 +54,9 @@ main = do
       $ \(l :: ['[3,2]++>'[4,3]])
          -> let l' = (applyLinear-+$>) <$> l
             in (arr<$>runWithCapabilities cpb (optimiseBatch pure $ l')) === l
+     , testProperty "Tuples"
+      $ \(l :: [((Int, CDoubleArray 3), '[2,3]++>'[4,5])])
+            -> runWithCapabilities cpb (optimiseBatch pure l) === l
      ]
    , testGroup "Array indices"
      [ testProperty "List view of basis"

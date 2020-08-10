@@ -24,9 +24,12 @@ import Data.Traversable
 import Control.Category.Constrained.Prelude hiding (Traversable(..), forM)
 
 import Data.Batch.Optimisable
+import Data.Batch.Optimisable.Unsafe
+   (unsafeZipTraversablesWith, Optimised(..))
 
 import Data.VectorSpace
 import Math.LinearMap.Category
+import Math.VectorSpace.ZeroDimensional
 
 import Control.Monad.Trans.State
 import qualified Data.Foldable as Fldb
@@ -86,3 +89,28 @@ instance ∀ s v w
 -- linfuncizeTensorLinMap :: LinearMap s w (Tensor s v u)
 --            -+> Tensor s (LinearFunction s x y) (LinearMap s u w)
 -- linfuncizeTensorLinMap = undefined
+
+instance BatchOptimisable (ZeroDim s) where
+  data Optimised (ZeroDim s) σ τ
+        = ZeroDimBatch {getPseudoOptZeroDimBatch :: τ (ZeroDim s)}
+  allocateBatch = pure . ZeroDimBatch
+  peekOptimised = pure . getPseudoOptZeroDimBatch
+
+
+instance (Num' s, BatchableLinFuns s s)
+     => BatchableLinFuns s (ZeroDim s) where
+  sampleLinFunBatch (LinFuncOptdBatch shp _) = do
+     return $ fmap (const zeroV) shp
+
+instance (BatchableLinFuns s x, BatchableLinFuns s y)
+     => BatchableLinFuns s (x,y) where
+  sampleLinFunBatch (LinFuncOptdBatch shp xyos) = do
+     xZeroes <- allocateBatch $ fmap (const zeroV) shp
+     yZeroes <- allocateBatch $ fmap (const zeroV) shp
+     xResos <- sampleLinFunBatch . LinFuncOptdBatch shp
+                 $ xyos . \oxs -> OptimisedTuple oxs yZeroes
+     yResos <- sampleLinFunBatch . LinFuncOptdBatch shp
+                 $ xyos . \oys -> OptimisedTuple xZeroes oys
+     return $ unsafeZipTraversablesWith
+               (\(LinearMap xw) (LinearMap yw) -> LinearMap (Tensor xw, Tensor yw))
+               xResos yResos

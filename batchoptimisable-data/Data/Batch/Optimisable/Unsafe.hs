@@ -23,19 +23,21 @@
 module Data.Batch.Optimisable.Unsafe (
    -- * Batch-packed data
      BatchOptimisable(..)
-   , OptimiseM(..), runWithCapabilities, unsafeIO
+   , OptimiseM(..), Optimised(..), runWithCapabilities, unsafeIO
    -- ** Batch containers
    , Traversable(..), itraverse
    -- * System resource bookkeeping
    , SystemCapabilities
    , detectCpuCapabilities
    , RscReleaseHook(..)
+   -- * Utility
+   , unsafeZipTraversablesWith
    ) where
 
 import Data.Kind(Type)
 import Data.Traversable
 import Control.Lens.Indexed (TraversableWithIndex(..))
-import Data.Foldable as Foldable
+import Data.Foldable as Fldb
 
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector.Unboxed.Mutable as VUM
@@ -45,7 +47,6 @@ import Control.Monad
 import Control.Monad.Fail
 import Control.Monad.Trans.Identity
 import Control.Monad.Trans.State.Strict as SSM
-import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Arrow (first)
 
 import Data.DList (DList)
@@ -139,7 +140,7 @@ instance BatchOptimisable Int where
 --         return i
 --      f $ VU.unsafeIndex vals i
   allocateBatch input = OptimiseM $ \_ -> do
-      let n = Foldable.length input
+      let n = Fldb.length input
       valV <- VUM.unsafeNew n
       shape <- (`evalStateT`0) . (`traverse`input) $ \x -> do
          i <- get
@@ -153,8 +154,28 @@ instance (Traversable t, QC.Arbitrary (t ()))
              => QC.Arbitrary (Optimised Int s t) where
   arbitrary = do
      shape <- QC.arbitrary
-     let n = Foldable.length shape
+     let n = Fldb.length shape
      values <- replicateM n QC.arbitrary
      return $ IntVector (VU.fromList values) shape
   shrink = undefined
 
+unsafeZipTraversablesWith :: Traversable t => (a -> b -> c)
+                   -> t a -> t b -> t c
+unsafeZipTraversablesWith f xs ys
+             = (`SSM.evalState`Fldb.toList ys) . forM xs $ \x -> do
+     y <- head <$> SSM.get
+     SSM.modify tail
+     return $ f x y
+
+instance (BatchOptimisable a, BatchOptimisable b) => BatchOptimisable (a,b) where
+  data Optimised (a,b) σ τ = OptimisedTuple
+         { optimL :: Optimised a σ τ
+         , optimR :: Optimised b σ τ }
+  allocateBatch xys = do
+    xos <- allocateBatch $ fst<$>xys
+    yos <- allocateBatch $ snd<$>xys
+    return $ OptimisedTuple xos yos
+  peekOptimised (OptimisedTuple xos yos) = do
+    xs <- peekOptimised xos
+    ys <- peekOptimised yos
+    return $ unsafeZipTraversablesWith (,) xs ys

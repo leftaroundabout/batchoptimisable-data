@@ -22,6 +22,8 @@ main = do
   defaultMain $ testGroup "Tests"
    [ testProperty "Retrieve optimised integer list"
      $ \(l :: [Int]) -> runWithCapabilities cpb (optimiseBatch pure l) === l
+   , testProperty "Retrieve optimised tuple list"
+     $ \(l :: [(Int,Int)]) -> runWithCapabilities cpb (optimiseBatch pure l) === l
    ]
 
 
