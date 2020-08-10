@@ -114,6 +114,12 @@ instance (Num' s, BatchableLinFuns s s)
   sampleLinFunBatch (LinFuncOptdBatch shp _) = do
      return $ fmap (const zeroV) shp
 
+instance BatchableLinFuns Double Double where
+  sampleLinFunBatch (LinFuncOptdBatch shp (LinFuncOnBatch f)) = do
+     inputs <- allocateBatch $ const 1 <$> shp
+     results <- f inputs
+     fmap (fmap LinearMap) $ peekOptimised results
+
 instance (BatchableLinFuns s x, BatchableLinFuns s y)
      => BatchableLinFuns s (x,y) where
   sampleLinFunBatch (LinFuncOptdBatch shp (LinFuncOnBatch xyos)) = do
