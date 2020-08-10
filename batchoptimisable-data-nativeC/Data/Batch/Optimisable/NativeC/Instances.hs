@@ -433,4 +433,14 @@ instance ∀ d t s . ( KnownShape d, Num' t, CPortable t, CPortable (DualVector 
           relevantResults <- map (Tensor . head)<$>get
           modify $ map tail
           return $ LinearMap relevantResults
+--sampleLinFunLinFunBatch :: ∀ v w σ τ
+--      . ( Traversable τ, BatchableLinFuns s v, BatchOptimisable w
+--        , Scalar w ~ s )
+--      => Optimised (LinearFunction s (LinearFunction s (MultiArray d t) v) w) σ τ
+--         -> OptimiseM σ (τ (Tensor s (MultiArray d t) (LinearMap s v w)))
+--sampleLinFunLinFunBatch = case ( linearManifoldWitness @t
+--                         , closedScalarWitness @t
+--                         , trivialTensorWitness @t @w ) of
+-- (LinearManifoldWitness, ClosedScalarWitness, TrivialTensorWitness)
+--          -> \(LinFuncOptdBatch shp fs) -> _
 
