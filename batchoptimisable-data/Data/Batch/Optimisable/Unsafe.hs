@@ -125,24 +125,22 @@ class BatchOptimisable d where
       (peekd, _) <- runOptimiseM (peekOptimised yVals) sysCaps
       return (peekd, xRscR<>yRscR)
 
-instance BatchOptimisable Int where
-  data Optimised Int s t
-    = IntVector { getIntVector :: VU.Vector Int
-                , intVecShape :: t ()
-                }
-  peekBatchShape = pure . intVecShape
-  peekOptimised (IntVector vals shape)
+data VUOptimised a s t
+    = VUOptimised { vuOptimisedShape :: t ()
+                  , vuOptimisedVector :: VU.Vector a }
+
+peekVUBatchShape :: VUOptimised a s t -> OptimiseM s (t ())
+peekVUBatchShape = pure . vuOptimisedShape
+
+peekVUOptimised :: (VU.Unbox a, Traversable t)
+                      => VUOptimised a s t -> OptimiseM s (t a)
+peekVUOptimised (VUOptimised shape vals)
         = pure . (`SSM.evalState`0) . (`traverse`shape)
          $ \() -> SSM.state $ \i -> (vals `VU.unsafeIndex` i, i+1)
---traverseOptimisedT f (IntVector vals shape _) = do
---    iSt <- lift . unsafeIO $ newIORef 0
---    forM shape $ \() -> do
---      i <- lift . unsafeIO $ do
---         i <- readIORef iSt
---         modifyIORef iSt (+1)
---         return i
---      f $ VU.unsafeIndex vals i
-  allocateBatch input = OptimiseM $ \_ -> do
+
+allocateVUBatch :: (VU.Unbox a, Traversable t)
+           => t a -> OptimiseM s (VUOptimised a s t)
+allocateVUBatch input = OptimiseM $ \_ -> do
       let n = Fldb.length input
       valV <- VUM.unsafeNew n
       shape <- (`evalStateT`0) . (`traverse`input) $ \x -> do
@@ -151,16 +149,41 @@ instance BatchOptimisable Int where
          put $ i+1
          pure ()
       vals <- VU.unsafeFreeze valV
-      return (IntVector vals shape, mempty)
+      return (VUOptimised shape vals, mempty)
 
-instance (Traversable t, QC.Arbitrary (t ()))
-             => QC.Arbitrary (Optimised Int s t) where
+instance BatchOptimisable Int where
+  newtype Optimised Int s t
+    = IntVectorOptim { getIntVUO :: VUOptimised Int s t }
+  peekBatchShape = peekVUBatchShape . getIntVUO
+  peekOptimised = peekVUOptimised . getIntVUO
+  allocateBatch = fmap IntVectorOptim . allocateVUBatch
+
+instance BatchOptimisable Double where
+  newtype Optimised Double s t
+    = DoubleVectorOptim { getDoubleVUO :: VUOptimised Double s t }
+  peekBatchShape = peekVUBatchShape . getDoubleVUO
+  peekOptimised = peekVUOptimised . getDoubleVUO
+  allocateBatch = fmap DoubleVectorOptim . allocateVUBatch
+
+instance ( Traversable t, QC.Arbitrary (t ())
+         , QC.Arbitrary a, VU.Unbox a )
+             => QC.Arbitrary (VUOptimised a s t) where
   arbitrary = do
      shape <- QC.arbitrary
      let n = Fldb.length shape
      values <- replicateM n QC.arbitrary
-     return $ IntVector (VU.fromList values) shape
+     return $ VUOptimised shape (VU.fromList values)
   shrink = undefined
+
+instance ( Traversable t, QC.Arbitrary (t ()) )
+             => QC.Arbitrary (Optimised Int s t) where
+  arbitrary = IntVectorOptim <$> QC.arbitrary
+  shrink (IntVectorOptim v) = IntVectorOptim <$> QC.shrink v
+
+instance ( Traversable t, QC.Arbitrary (t ()) )
+             => QC.Arbitrary (Optimised Double s t) where
+  arbitrary = DoubleVectorOptim <$> QC.arbitrary
+  shrink (DoubleVectorOptim v) = DoubleVectorOptim <$> QC.shrink v
 
 unsafeZipTraversablesWith :: Traversable t => (a -> b -> c)
                    -> t a -> t b -> t c

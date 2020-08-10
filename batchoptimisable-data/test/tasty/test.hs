@@ -23,7 +23,7 @@ main = do
    [ testProperty "Retrieve optimised integer list"
      $ \(l :: [Int]) -> runWithCapabilities cpb (optimiseBatch pure l) === l
    , testProperty "Retrieve optimised tuple list"
-     $ \(l :: [(Int,Int)]) -> runWithCapabilities cpb (optimiseBatch pure l) === l
+     $ \(l :: [(Int,Double)]) -> runWithCapabilities cpb (optimiseBatch pure l) === l
    ]
 
 
