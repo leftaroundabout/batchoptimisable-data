@@ -9,6 +9,7 @@
 -- 
 
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UnicodeSyntax         #-}
@@ -22,6 +23,7 @@ module Data.Batch.Optimisable.LinearMaps where
 import qualified Prelude as Hask
 import Data.Traversable
 import Control.Category.Constrained.Prelude hiding (Traversable(..), forM)
+import Control.Arrow.Constrained
 
 import Data.Batch.Optimisable
 import Data.Batch.Optimisable.Unsafe
@@ -31,6 +33,7 @@ import Data.VectorSpace
 import Math.LinearMap.Category
 import Math.VectorSpace.ZeroDimensional
 
+import Control.Monad ((<=<))
 import Control.Monad.Trans.State
 import qualified Data.Foldable as Fldb
 
@@ -46,6 +49,17 @@ class (BatchOptimisable v, LinearSpace v, Scalar v ~ s)
                              , Scalar w ~ s, Traversable τ )
         => Optimised (LinearFunction s (LinearFunction s v u) w) σ τ
            -> OptimiseM σ (τ (Tensor s v (LinearMap s u w)))
+  optimisedZero :: Traversable τ => τ a -> OptimiseM σ (Optimised v σ τ)
+  negateOptimised :: Optimised v σ τ
+         -> OptimiseM σ (Optimised v σ τ)
+  unsafeAddOptimised :: Traversable τ
+         => Optimised v σ τ -- ^ Input batches,
+         -> Optimised v σ τ -- ^ must have same shape
+         -> OptimiseM σ (Optimised v σ τ)
+
+newtype LinFuncOnBatch s σ τ v w
+    = LinFuncOnBatch { runLFOnBatch :: Optimised v σ τ
+                                    -> OptimiseM σ (Optimised w σ τ) }
 
 instance ∀ s v w
          . ( BatchableLinFuns s v
@@ -55,10 +69,8 @@ instance ∀ s v w
   data Optimised (LinearFunction s v w) σ τ
     = LinFuncOptdBatch {
              lfbShape :: τ ()
-           , runOptdLinFuncBatch
-                :: Optimised v σ τ
-                  -> OptimiseM σ (Optimised w σ τ) }
-  allocateBatch batch = pure . LinFuncOptdBatch (const()<$>batch)
+           , runOptdLinFuncBatch :: LinFuncOnBatch s σ τ v w }
+  allocateBatch batch = pure . LinFuncOptdBatch (const()<$>batch) . LinFuncOnBatch
            $ \a -> do
        inputs <- peekOptimised a
        outputs <- (`evalStateT`Fldb.toList batch) . forM inputs $ \x -> do
@@ -104,13 +116,70 @@ instance (Num' s, BatchableLinFuns s s)
 
 instance (BatchableLinFuns s x, BatchableLinFuns s y)
      => BatchableLinFuns s (x,y) where
-  sampleLinFunBatch (LinFuncOptdBatch shp xyos) = do
+  sampleLinFunBatch (LinFuncOptdBatch shp (LinFuncOnBatch xyos)) = do
      xZeroes <- allocateBatch $ fmap (const zeroV) shp
      yZeroes <- allocateBatch $ fmap (const zeroV) shp
-     xResos <- sampleLinFunBatch . LinFuncOptdBatch shp
+     xResos <- sampleLinFunBatch . LinFuncOptdBatch shp . LinFuncOnBatch
                  $ xyos . \oxs -> OptimisedTuple oxs yZeroes
-     yResos <- sampleLinFunBatch . LinFuncOptdBatch shp
+     yResos <- sampleLinFunBatch . LinFuncOptdBatch shp . LinFuncOnBatch
                  $ xyos . \oys -> OptimisedTuple xZeroes oys
      return $ unsafeZipTraversablesWith
                (\(LinearMap xw) (LinearMap yw) -> LinearMap (Tensor xw, Tensor yw))
                xResos yResos
+
+
+
+instance Traversable τ => Category (LinFuncOnBatch s σ τ) where
+  type Object (LinFuncOnBatch s σ τ) v = (BatchableLinFuns s v)
+  id = LinFuncOnBatch pure
+  LinFuncOnBatch vws . LinFuncOnBatch uvs
+   = LinFuncOnBatch $ \uos -> do
+        vos <- uvs uos
+        vws vos
+
+instance (Traversable τ, BatchableLinFuns s s, Num' s)
+             => Cartesian (LinFuncOnBatch s σ τ) where
+  type UnitObject (LinFuncOnBatch s σ τ) = ZeroDim s
+  swap = LinFuncOnBatch $ \(OptimisedTuple xs ys)
+               -> return $ OptimisedTuple ys xs
+  attachUnit = LinFuncOnBatch $ \xs -> do
+      units <- allocateBatch . fmap (const Origin) =<< peekBatchShape xs
+      return $ OptimisedTuple xs units
+  detachUnit = LinFuncOnBatch $ \(OptimisedTuple xs _) -> pure xs
+  regroup = LinFuncOnBatch $ \(OptimisedTuple xs (OptimisedTuple ys zs))
+               -> return $ OptimisedTuple (OptimisedTuple xs ys) zs
+  regroup' = LinFuncOnBatch $ \(OptimisedTuple (OptimisedTuple xs ys) zs)
+               -> return $ OptimisedTuple xs (OptimisedTuple ys zs)
+
+instance (Traversable τ, BatchableLinFuns s s, Num' s)
+             => Morphism (LinFuncOnBatch s σ τ) where
+  LinFuncOnBatch f *** LinFuncOnBatch g
+     = LinFuncOnBatch $ \(OptimisedTuple xs ys) -> do
+           fxs <- f xs
+           gys <- g ys
+           return $ OptimisedTuple fxs gys
+
+instance (Traversable τ, BatchableLinFuns s s, Num' s)
+             => PreArrow (LinFuncOnBatch s σ τ) where
+  LinFuncOnBatch f &&& LinFuncOnBatch g
+     = LinFuncOnBatch $ \xs -> do
+           fxs <- f xs
+           gxs <- g xs
+           return $ OptimisedTuple fxs gxs
+  terminal = LinFuncOnBatch $ \xs -> do
+      shp <- peekBatchShape xs
+      return . ZeroDimBatch $ fmap (const Origin) shp
+  fst = LinFuncOnBatch $ \(OptimisedTuple xs _) -> pure xs
+  snd = LinFuncOnBatch $ \(OptimisedTuple _ ys) -> pure ys
+
+instance (BatchOptimisable v, BatchableLinFuns s f, Traversable τ)
+              => AdditiveGroup (LinFuncOnBatch s σ τ v f) where
+  zeroV = LinFuncOnBatch $ \xs -> do
+    shp <- peekBatchShape xs
+    optimisedZero shp
+  LinFuncOnBatch f ^+^ LinFuncOnBatch g
+         = LinFuncOnBatch $ \xs -> do
+    fxs <- f xs
+    gxs <- g xs
+    unsafeAddOptimised fxs gxs
+  negateV (LinFuncOnBatch f) = LinFuncOnBatch $ negateOptimised <=< f

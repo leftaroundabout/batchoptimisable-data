@@ -114,6 +114,8 @@ class BatchOptimisable d where
 --traverseOptimised f = runIdentityT . traverseOptimisedT (IdentityT . f)
   peekOptimised :: Traversable t
       => Optimised d s t -> OptimiseM s (t d)
+  peekBatchShape :: Traversable t => Optimised d s t -> OptimiseM s (t ())
+  peekBatchShape = fmap (fmap $ const ()) . peekOptimised
   optimiseBatch :: (Traversable t, BatchOptimisable d')
      => (Optimised d s t -> OptimiseM s (Optimised d' s t))
                 -> t d -> OptimiseM s (t d')
@@ -128,6 +130,7 @@ instance BatchOptimisable Int where
     = IntVector { getIntVector :: VU.Vector Int
                 , intVecShape :: t ()
                 }
+  peekBatchShape = pure . intVecShape
   peekOptimised (IntVector vals shape)
         = pure . (`SSM.evalState`0) . (`traverse`shape)
          $ \() -> SSM.state $ \i -> (vals `VU.unsafeIndex` i, i+1)

@@ -254,6 +254,7 @@ instance ∀ dims t . (KnownShape dims, CPortable t)
       return ()
     return ( OptdArr shp loc
            , pure $ RscReleaseHook (releaseArray loc) )
+  peekBatchShape (OptdArr shp _) = pure shp
   peekOptimised (OptdArr shp loc) = OptimiseM $ \_ -> do
     let nArr = fromIntegral . product $ shape @dims
     tgt <- VSM.unsafeNew $ fromIntegral nArr

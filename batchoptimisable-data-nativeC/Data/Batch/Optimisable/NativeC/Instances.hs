@@ -423,7 +423,7 @@ instance ∀ d t s . ( KnownShape d, Num' t, CPortable t, CPortable (DualVector 
                            , closedScalarWitness @t
                            , trivialTensorWitness @t @w ) of
    (LinearManifoldWitness, ClosedScalarWitness, TrivialTensorWitness)
-            -> \(LinFuncOptdBatch shp fs) -> do
+            -> \(LinFuncOptdBatch shp (LinFuncOnBatch fs)) -> do
      outputBatches <- forM (allIndices @d) $ \i -> do
         let inputArr = placeAtIndex i 1
         inputBatch <- allocateBatch $ const inputArr <$> shp
