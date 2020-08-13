@@ -28,6 +28,7 @@ module Data.Batch.Optimisable.Unsafe (
    , Traversable(..), itraverse
    -- * System resource bookkeeping
    , SystemCapabilities
+   , primitiveCapabilities
    , detectCpuCapabilities
    , RscReleaseHook(..)
    -- * Utility
@@ -58,6 +59,11 @@ import System.IO.Unsafe
 import Control.Exception (bracketOnError)
 
 data SystemCapabilities = SystemCapabilities
+
+-- | Bare-bones capabilities that any computer can be expected to
+--   have. Mostly intended for debugging.
+primitiveCapabilities :: SystemCapabilities
+primitiveCapabilities = SystemCapabilities
 
 detectCpuCapabilities :: IO SystemCapabilities
 detectCpuCapabilities = pure SystemCapabilities

@@ -24,6 +24,7 @@ module Data.Batch.Optimisable (
    , OptimiseM, runWithCapabilities
    -- * System resource bookkeeping
    , SystemCapabilities
+   , primitiveCapabilities
    , detectCpuCapabilities
    ) where
 
