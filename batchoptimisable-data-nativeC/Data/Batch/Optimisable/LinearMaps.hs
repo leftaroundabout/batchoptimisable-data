@@ -8,14 +8,15 @@
 -- Portability : portable
 -- 
 
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE UndecidableInstances  #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE UnicodeSyntax         #-}
-{-# LANGUAGE TypeApplications      #-}
-{-# LANGUAGE TypeOperators         #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE UnicodeSyntax          #-}
+{-# LANGUAGE AllowAmbiguousTypes    #-}
+{-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
 
 
 module Data.Batch.Optimisable.LinearMaps where
@@ -27,11 +28,13 @@ import Control.Arrow.Constrained
 
 import Data.Batch.Optimisable
 import Data.Batch.Optimisable.Unsafe
-   (unsafeZipTraversablesWith, Optimised(..))
+   (unsafeZipTraversablesWith, Optimised(..), VUOptimised(..))
 
 import Data.VectorSpace
 import Math.LinearMap.Category
 import Math.VectorSpace.ZeroDimensional
+
+import qualified Data.Vector.Unboxed as VU
 
 import Control.Monad ((<=<))
 import Control.Monad.Trans.State
@@ -39,7 +42,7 @@ import qualified Data.Foldable as Fldb
 
 
 class (BatchOptimisable v, LinearSpace v, Scalar v ~ s)
-   => BatchableLinFuns s v where
+   => BatchableLinFuns s v | v->s where
   sampleLinFunBatch :: ( TensorSpace w, BatchOptimisable w
                        , Scalar w ~ s, Traversable τ )
         => Optimised (LinearFunction s v w) σ τ
@@ -56,6 +59,14 @@ class (BatchOptimisable v, LinearSpace v, Scalar v ~ s)
          => Optimised v σ τ -- ^ Input batches,
          -> Optimised v σ τ -- ^ must have same shape
          -> OptimiseM σ (Optimised v σ τ)
+  unsafeSubtractOptimised :: Traversable τ
+         => Optimised v σ τ -- ^ Input batches,
+         -> Optimised v σ τ -- ^ must have same shape
+         -> OptimiseM σ (Optimised v σ τ)
+  unsafeMulScalarsOptimised :: Traversable τ
+         => Optimised s σ τ -- ^ Input batches,
+         -> Optimised s σ τ -- ^ must have same shape
+         -> OptimiseM σ (Optimised s σ τ)
 
 newtype LinFuncOnBatch s σ τ v w
     = LinFuncOnBatch { runLFOnBatch :: Optimised v σ τ
@@ -119,6 +130,18 @@ instance BatchableLinFuns Double Double where
      inputs <- allocateBatch $ const 1 <$> shp
      results <- f inputs
      fmap (fmap LinearMap) $ peekOptimised results
+  optimisedZero shp = allocateBatch $ fmap (const 0) shp
+  unsafeAddOptimised (DoubleVectorOptim (VUOptimised shp xs))
+                     (DoubleVectorOptim (VUOptimised _ ys))
+      = pure . DoubleVectorOptim . VUOptimised shp $ VU.zipWith (+) xs ys
+  negateOptimised (DoubleVectorOptim (VUOptimised shp xs))
+      = pure . DoubleVectorOptim . VUOptimised shp $ VU.map negate xs
+  unsafeSubtractOptimised (DoubleVectorOptim (VUOptimised shp xs))
+                     (DoubleVectorOptim (VUOptimised _ ys))
+      = pure . DoubleVectorOptim . VUOptimised shp $ VU.zipWith (-) xs ys
+  unsafeMulScalarsOptimised (DoubleVectorOptim (VUOptimised shp xs))
+                     (DoubleVectorOptim (VUOptimised _ ys))
+      = pure . DoubleVectorOptim . VUOptimised shp $ VU.zipWith (*) xs ys
 
 instance (BatchableLinFuns s x, BatchableLinFuns s y)
      => BatchableLinFuns s (x,y) where

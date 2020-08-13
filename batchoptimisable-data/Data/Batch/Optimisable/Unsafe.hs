@@ -33,6 +33,7 @@ module Data.Batch.Optimisable.Unsafe (
    , RscReleaseHook(..)
    -- * Utility
    , unsafeZipTraversablesWith
+   , VUOptimised(..)
    ) where
 
 import Data.Kind(Type)
