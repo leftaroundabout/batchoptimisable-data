@@ -27,7 +27,7 @@ library
                        , vector
                        , dlist >=0.8 && <0.9
                        , transformers
-                       , lens >=4.19 && <4.23
+                       , lens >=4.17 && <4.23
                        , QuickCheck
   -- hs-source-dirs:
   default-language:    Haskell2010

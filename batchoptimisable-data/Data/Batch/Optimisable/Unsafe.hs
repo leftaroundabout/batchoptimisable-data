@@ -40,6 +40,7 @@ import Data.Kind(Type)
 import Data.Traversable
 import Control.Lens.Indexed (TraversableWithIndex(..))
 import Data.Foldable as Fldb
+import Data.Semigroup ((<>))
 
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector.Unboxed.Mutable as VUM
