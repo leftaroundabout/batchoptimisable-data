@@ -177,7 +177,7 @@ class VS.Storable c => CHandleable c where
               -> IO ()
 
 class (VU.Unbox t, CHandleable (CCType t)) => CPortable t where
-  type CCType t :: *
+  type CCType t :: Type
   thawForC :: PrimMonad m
     => VU.Vector t -> m (VSM.MVector (PrimState m) (CCType t))
   freezeFromC :: PrimMonad m
