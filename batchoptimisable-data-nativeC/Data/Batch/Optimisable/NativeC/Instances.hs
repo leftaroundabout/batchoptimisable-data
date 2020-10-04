@@ -45,6 +45,7 @@ import Control.Arrow (first)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Foldable as Fldb
+import Data.Semigroup ((<>))
 
 import GHC.Exts (IsList(..))
 import Data.Type.Coercion
