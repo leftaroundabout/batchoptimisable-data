@@ -13,6 +13,7 @@
 {-# LANGUAGE UndecidableInstances   #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TypeInType             #-}
 {-# LANGUAGE UnicodeSyntax          #-}
 {-# LANGUAGE AllowAmbiguousTypes    #-}
 {-# LANGUAGE TypeApplications       #-}
@@ -42,6 +43,8 @@ import Control.Monad ((<=<))
 import Control.Monad.Trans.State
 import qualified Data.Foldable as Fldb
 
+import Data.Kind (Type)
+
 
 class (BatchOptimisable v, LinearSpace v, Scalar v ~ s, BatchableNum s)
    => BatchableLinFuns s v | v->s where
@@ -70,7 +73,7 @@ class (BatchOptimisable v, LinearSpace v, Scalar v ~ s, BatchableNum s)
          -> Optimised v σ τ -- ^ must have same shape
          -> OptimiseM σ (Optimised v σ τ)
 
-newtype LinFuncOnBatch s σ τ v w
+newtype LinFuncOnBatch (s :: Type) σ (τ :: Type->Type) (v :: Type) (w :: Type)
     = LinFuncOnBatch { runLFOnBatch :: Optimised v σ τ
                                     -> OptimiseM σ (Optimised w σ τ) }
 
