@@ -9,6 +9,7 @@
 -- 
 
 {-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE UndecidableInstances   #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies           #-}
@@ -29,6 +30,7 @@ import Control.Arrow.Constrained
 import Data.Batch.Optimisable
 import Data.Batch.Optimisable.Unsafe
    (unsafeZipTraversablesWith, Optimised(..), VUOptimised(..))
+import Data.Batch.Optimisable.Numerical
 
 import Data.VectorSpace
 import Math.LinearMap.Category
@@ -41,7 +43,7 @@ import Control.Monad.Trans.State
 import qualified Data.Foldable as Fldb
 
 
-class (BatchOptimisable v, LinearSpace v, Scalar v ~ s)
+class (BatchOptimisable v, LinearSpace v, Scalar v ~ s, BatchableNum s)
    => BatchableLinFuns s v | v->s where
   sampleLinFunBatch :: ( TensorSpace w, BatchOptimisable w
                        , Scalar w ~ s, Traversable τ )
@@ -52,21 +54,21 @@ class (BatchOptimisable v, LinearSpace v, Scalar v ~ s)
                              , Scalar w ~ s, Traversable τ )
         => Optimised (LinearFunction s (LinearFunction s v u) w) σ τ
            -> OptimiseM σ (τ (Tensor s v (LinearMap s u w)))
-  optimisedZero :: Traversable τ => τ a -> OptimiseM σ (Optimised v σ τ)
-  negateOptimised :: Optimised v σ τ
+  optimisedZeroV :: Traversable τ => τ a -> OptimiseM σ (Optimised v σ τ)
+  negateVOptimised :: Optimised v σ τ
          -> OptimiseM σ (Optimised v σ τ)
-  unsafeAddOptimised :: Traversable τ
+  unsafeAddVOptimised :: Traversable τ
          => Optimised v σ τ -- ^ Input batches,
          -> Optimised v σ τ -- ^ must have same shape
          -> OptimiseM σ (Optimised v σ τ)
-  unsafeSubtractOptimised :: Traversable τ
+  unsafeSubtractVOptimised :: Traversable τ
          => Optimised v σ τ -- ^ Input batches,
          -> Optimised v σ τ -- ^ must have same shape
          -> OptimiseM σ (Optimised v σ τ)
-  unsafeMulScalarsOptimised :: Traversable τ
+  unsafeScaleOptimised :: Traversable τ
          => Optimised s σ τ -- ^ Input batches,
-         -> Optimised s σ τ -- ^ must have same shape
-         -> OptimiseM σ (Optimised s σ τ)
+         -> Optimised v σ τ -- ^ must have same shape
+         -> OptimiseM σ (Optimised v σ τ)
 
 newtype LinFuncOnBatch s σ τ v w
     = LinFuncOnBatch { runLFOnBatch :: Optimised v σ τ
@@ -130,18 +132,11 @@ instance BatchableLinFuns Double Double where
      inputs <- allocateBatch $ const 1 <$> shp
      results <- f inputs
      fmap (fmap LinearMap) $ peekOptimised results
-  optimisedZero shp = allocateBatch $ fmap (const 0) shp
-  unsafeAddOptimised (DoubleVectorOptim (VUOptimised shp xs))
-                     (DoubleVectorOptim (VUOptimised _ ys))
-      = pure . DoubleVectorOptim . VUOptimised shp $ VU.zipWith (+) xs ys
-  negateOptimised (DoubleVectorOptim (VUOptimised shp xs))
-      = pure . DoubleVectorOptim . VUOptimised shp $ VU.map negate xs
-  unsafeSubtractOptimised (DoubleVectorOptim (VUOptimised shp xs))
-                     (DoubleVectorOptim (VUOptimised _ ys))
-      = pure . DoubleVectorOptim . VUOptimised shp $ VU.zipWith (-) xs ys
-  unsafeMulScalarsOptimised (DoubleVectorOptim (VUOptimised shp xs))
-                     (DoubleVectorOptim (VUOptimised _ ys))
-      = pure . DoubleVectorOptim . VUOptimised shp $ VU.zipWith (*) xs ys
+  optimisedZeroV = optimisedZero
+  unsafeAddVOptimised = unsafeAddOptimised
+  negateVOptimised = negateOptimised
+  unsafeSubtractVOptimised = unsafeSubtractOptimised
+  unsafeScaleOptimised = unsafeMulOptimised
 
 instance (BatchableLinFuns s x, BatchableLinFuns s y)
      => BatchableLinFuns s (x,y) where
@@ -205,10 +200,10 @@ instance (BatchOptimisable v, BatchableLinFuns s f, Traversable τ)
               => AdditiveGroup (LinFuncOnBatch s σ τ v f) where
   zeroV = LinFuncOnBatch $ \xs -> do
     shp <- peekBatchShape xs
-    optimisedZero shp
+    optimisedZeroV shp
   LinFuncOnBatch f ^+^ LinFuncOnBatch g
          = LinFuncOnBatch $ \xs -> do
     fxs <- f xs
     gxs <- g xs
-    unsafeAddOptimised fxs gxs
-  negateV (LinFuncOnBatch f) = LinFuncOnBatch $ negateOptimised <=< f
+    unsafeAddVOptimised fxs gxs
+  negateV (LinFuncOnBatch f) = LinFuncOnBatch $ negateVOptimised <=< f

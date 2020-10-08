@@ -26,6 +26,7 @@ library
   exposed-modules:   Data.Batch.Optimisable.NativeC
                      Data.Batch.Optimisable.NativeC.Internal
                      Data.Batch.Optimisable.LinearMaps
+                     Data.Batch.Optimisable.Numerical
   other-modules:
                      Data.Batch.Optimisable.NativeC.Instances
   -- other-extensions:

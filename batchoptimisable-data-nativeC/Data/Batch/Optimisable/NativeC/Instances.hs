@@ -28,6 +28,7 @@ module Data.Batch.Optimisable.NativeC.Instances () where
 
 import Data.Batch.Optimisable
 import Data.Batch.Optimisable.NativeC.Internal
+import Data.Batch.Optimisable.Numerical
 import Data.Batch.Optimisable.LinearMaps
 
 import Data.AffineSpace
@@ -414,7 +415,8 @@ instance ∀ d e t s
 
 
 instance ∀ d t s . ( KnownShape d, Num' t, CPortable t, CPortable (DualVector t)
-                   , CPortable s, LinearSpace t, Needle t ~ t, Scalar t ~ s )
+                   , BatchableNum s, CPortable s, LinearSpace t
+                   , Needle t ~ t, Scalar t ~ s )
    => BatchableLinFuns s (MultiArray d t) where
   sampleLinFunBatch :: ∀ w σ τ
         . (Traversable τ, BatchOptimisable w)
