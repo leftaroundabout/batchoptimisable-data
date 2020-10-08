@@ -13,7 +13,7 @@
 {-# LANGUAGE UndecidableInstances   #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE TypeInType             #-}
+{-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE UnicodeSyntax          #-}
 {-# LANGUAGE AllowAmbiguousTypes    #-}
 {-# LANGUAGE TypeApplications       #-}
@@ -221,3 +221,10 @@ class (BatchableLinFuns (Scalar v) v, FreeVectorSpace v)
          -> OptimiseM σ (Optimised v σ τ)
   fmapFreeVecOptimised :: PointwiseMapCategory v (Scalar v) (Scalar v)
                     -> Optimised v σ τ -> OptimiseM σ (Optimised v σ τ)
+
+
+instance BatchableFreeSpace Double where
+  type PointwiseMapCategory Double = (->)
+  unsafeMulPointwiseOptimised = unsafeMulOptimised
+  fmapFreeVecOptimised f (DoubleVectorOptim (VUOptimised shp xs))
+      = pure . DoubleVectorOptim . VUOptimised shp $ VU.map f xs
