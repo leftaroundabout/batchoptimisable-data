@@ -36,6 +36,7 @@ import Data.Batch.Optimisable.Numerical
 import Data.VectorSpace
 import Math.LinearMap.Category
 import Math.VectorSpace.ZeroDimensional
+import Data.VectorSpace.Free
 
 import qualified Data.Vector.Unboxed as VU
 
@@ -210,3 +211,13 @@ instance (BatchOptimisable v, BatchableLinFuns s f, Traversable τ)
     gxs <- g xs
     unsafeAddVOptimised fxs gxs
   negateV (LinFuncOnBatch f) = LinFuncOnBatch $ negateVOptimised <=< f
+
+class (BatchableLinFuns (Scalar v) v, FreeVectorSpace v)
+         => BatchableFreeSpace v where
+  type PointwiseMapCategory v :: Type -> Type -> Type
+  unsafeMulPointwiseOptimised :: Traversable τ
+         => Optimised v σ τ -- ^ Input batches,
+         -> Optimised v σ τ -- ^ must have same shape
+         -> OptimiseM σ (Optimised v σ τ)
+  fmapFreeVecOptimised :: PointwiseMapCategory v (Scalar v) (Scalar v)
+                    -> Optimised v σ τ -> OptimiseM σ (Optimised v σ τ)
