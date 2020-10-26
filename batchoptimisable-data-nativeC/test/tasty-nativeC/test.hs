@@ -104,6 +104,12 @@ main = do
                    (numFmapArrayBatchOptimised SymbRelu)
                                         l )
                        === (mapArray (\x -> if x>0 then x else 0) <$> l)
+     , testProperty "Simple addition"
+      $ \(l :: [CDoubleArray 57])
+            -> runWithCapabilities cpb (optimiseBatch
+                   (numFmapArrayBatchOptimised (alg (\x -> x+x)))
+                                        l )
+                       === (mapArray (*2) <$> l)
      ]
    ]
 
