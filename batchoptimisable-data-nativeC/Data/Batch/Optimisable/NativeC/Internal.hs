@@ -61,6 +61,7 @@ import Data.Int
 import Foreign.C.Types (CInt, CLong, CFloat, CDouble)
 import Foreign (Ptr)
 
+import Math.Category.SymbolicNumFunction
 
 
 type family (++) (l :: [k]) (m :: [k]) :: [k] where

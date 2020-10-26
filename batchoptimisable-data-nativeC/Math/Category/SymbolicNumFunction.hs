@@ -1,5 +1,5 @@
 -- |
--- Module      : Math.Category.SymbolicNumFn
+-- Module      : Math.Category.SymbolicNumFunction
 -- Copyright   : (c) Justus Sagemüller 2020
 -- License     : GPL v3
 -- 
@@ -21,7 +21,7 @@
 {-# LANGUAGE InstanceSigs          #-}
 {-# LANGUAGE UnicodeSyntax         #-}
 
-module Math.Category.SymbolicNumFn where
+module Math.Category.SymbolicNumFunction where
 
 import qualified Prelude as Hask
 
