@@ -26,6 +26,7 @@ import Data.AdditiveGroup
 import Data.VectorSpace
 import Data.Basis
 import Math.LinearMap.Category
+import Math.Category.SymbolicNumFunction
 
 import GHC.Exts (IsList(..))
 import Control.Arrow (first)
@@ -91,6 +92,18 @@ main = do
       $ \u (v :: T '[12]) μ w (x :: T '[13]) ν
             -> (u^+^μ*^v) ⊗ (w^+^ν*^x)
                  ≈≈≈ u⊗w ^+^ μ*^(v⊗w) ^+^ ν*^(u⊗x) ^+^ (μ*ν)*^(v⊗x)
+     ]
+   , testGroup "Element-wise mapping (optimised)"
+     [ testProperty "Identity function"
+      $ \(l :: [CDoubleArray 57])
+            -> runWithCapabilities cpb (optimiseBatch (numFmapArrayBatchOptimised id)
+                                        l ) === l
+     , testProperty "Relu"
+      $ \(l :: [CDoubleArray 57])
+            -> runWithCapabilities cpb (optimiseBatch
+                   (numFmapArrayBatchOptimised SymbRelu)
+                                        l )
+                       === (mapArray (\x -> if x>0 then x else 0) <$> l)
      ]
    ]
 

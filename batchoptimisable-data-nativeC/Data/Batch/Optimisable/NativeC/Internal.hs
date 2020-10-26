@@ -271,14 +271,14 @@ instance CPortable Double where
     = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
                          double r = $(double* src)[$(int sOffs)+i];
                          $(double* tgt)[$(int tOffs)+i]
-                             = r>0? r : 0;
+                             = r<0? 0 : r;
                      } } |]
 
 mapPrimitiveNumFunctionOnArray :: CPortable t
     => SymbNumFn t t -> Ptr (CCType t) -> CInt -> IO (Ptr (CCType t))
 mapPrimitiveNumFunctionOnArray f src nElems = do
    tgt <- callocArray nElems
-   mapPrimitiveNumFunctionToArray f (src,0) (tgt,0) nElems
+   mapPrimitiveNumFunctionToArray f (tgt,0) (src,0) nElems
    return tgt
 
 instance ∀ dims t . (KnownShape dims, CPortable t)
