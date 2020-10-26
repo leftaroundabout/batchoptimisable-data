@@ -168,6 +168,7 @@ type CDoubleArray n = MultiArray '[n] Double
 C.context (C.baseCtx <> C.vecCtx)
 C.include "<stdlib.h>"
 C.include "<string.h>"
+C.include "<math.h>"
 
 class VS.Storable c => CHandleable c where
   callocArray :: CInt -> IO (Ptr c)
@@ -187,6 +188,12 @@ class (VU.Unbox t, CHandleable (CCType t)) => CPortable t where
     => VU.Vector t -> m (VSM.MVector (PrimState m) (CCType t))
   freezeFromC :: PrimMonad m
     => VSM.MVector (PrimState m) (CCType t) -> m (VU.Vector t)
+  mapPrimitiveNumFunctionToArray
+              :: SymbNumFn t t          -- ^ Function to map
+              -> (Ptr (CCType t), CInt) -- ^ Target, with offset
+              -> (Ptr (CCType t), CInt) -- ^ Source, with offset
+              -> CInt                   -- ^ Number of elements
+              -> IO ()
 
 instance CHandleable CInt where
   callocArray nElems = [C.exp| int* {calloc($(int nElems), sizeof(int))} |]
@@ -255,6 +262,18 @@ instance CPortable Double where
   type CCType Double = CDouble
   thawForC = VS.thaw . VS.map realToFrac . VU.convert
   freezeFromC = fmap (VU.convert . VS.map realToFrac) . VS.freeze
+  mapPrimitiveNumFunctionToArray SymbAbs (tgt, tOffs) (src, sOffs) nElems
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         $(double* tgt)[$(int tOffs)+i]
+                             = fabs($(double* src)[$(int sOffs)+i]);
+                     } } |]
+
+mapPrimitiveNumFunctionOnArray :: CPortable t
+    => SymbNumFn t t -> Ptr (CCType t) -> CInt -> IO (Ptr (CCType t))
+mapPrimitiveNumFunctionOnArray f src nElems = do
+   tgt <- callocArray nElems
+   mapPrimitiveNumFunctionToArray f (src,0) (tgt,0) nElems
+   return tgt
 
 instance ∀ dims t . (KnownShape dims, CPortable t)
               => BatchOptimisable (MultiArray dims t) where
@@ -289,6 +308,17 @@ instance ∀ dims t . (KnownShape dims, CPortable t)
       MultiArray <$> freezeFromC tgt
     return (peekd, mempty)
 
+primitiveNumFmapArrayBatchOptimised :: ∀ a dims s τ
+      . ( CPortable a, KnownShape dims, Foldable τ )
+    => SymbNumFn a a -> Optimised (MultiArray dims a) s τ
+           -> OptimiseM s (Optimised (MultiArray dims a) s τ)
+primitiveNumFmapArrayBatchOptimised f (OptdArr shp src) = OptimiseM $ \_ -> do
+   let nArr = fromIntegral . product $ shape @dims
+       nBatch = Foldable.length shp
+       nElems = nArr * fromIntegral nBatch
+   res <- mapPrimitiveNumFunctionOnArray f src nElems 
+   return ( OptdArr shp res
+          , pure $ RscReleaseHook (releaseArray res) )
 
 numFmapArrayBatchOptimised :: ∀ a b dims s τ
       . ( CPortable a, CPortable b, Real b, Fractional (CCType b)
