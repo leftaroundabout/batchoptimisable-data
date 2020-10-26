@@ -8,17 +8,18 @@
 -- Portability : portable
 -- 
 
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE UndecidableInstances   #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE GADTs                  #-}
-{-# LANGUAGE UnicodeSyntax          #-}
-{-# LANGUAGE AllowAmbiguousTypes    #-}
-{-# LANGUAGE TypeApplications       #-}
-{-# LANGUAGE TypeOperators          #-}
-{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE FlexibleInstances       #-}
+{-# LANGUAGE FlexibleContexts        #-}
+{-# LANGUAGE UndecidableInstances    #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
+{-# LANGUAGE FunctionalDependencies  #-}
+{-# LANGUAGE TypeFamilies            #-}
+{-# LANGUAGE GADTs                   #-}
+{-# LANGUAGE UnicodeSyntax           #-}
+{-# LANGUAGE AllowAmbiguousTypes     #-}
+{-# LANGUAGE TypeApplications        #-}
+{-# LANGUAGE TypeOperators           #-}
+{-# LANGUAGE ScopedTypeVariables     #-}
 
 
 module Data.Batch.Optimisable.LinearMaps where
@@ -212,7 +213,8 @@ instance (BatchOptimisable v, BatchableLinFuns s f, Traversable τ)
     unsafeAddVOptimised fxs gxs
   negateV (LinFuncOnBatch f) = LinFuncOnBatch $ negateVOptimised <=< f
 
-class (BatchableLinFuns (Scalar v) v, FreeVectorSpace v)
+class ( BatchableLinFuns (Scalar v) v, FreeVectorSpace v
+      , Category (PointwiseMapCategory v), Object (PointwiseMapCategory v) (Scalar v) )
          => BatchableFreeSpace v where
   type PointwiseMapCategory v :: Type -> Type -> Type
   unsafeMulPointwiseOptimised :: Traversable τ

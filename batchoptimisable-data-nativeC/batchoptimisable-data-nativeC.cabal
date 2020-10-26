@@ -27,6 +27,7 @@ library
                      Data.Batch.Optimisable.NativeC.Internal
                      Data.Batch.Optimisable.LinearMaps
                      Data.Batch.Optimisable.Numerical
+                     Math.Category.SymbolicNumFn
   other-modules:
                      Data.Batch.Optimisable.NativeC.Instances
   -- other-extensions:
