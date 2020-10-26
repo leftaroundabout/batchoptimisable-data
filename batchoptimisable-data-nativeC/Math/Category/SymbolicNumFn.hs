@@ -49,11 +49,13 @@ data SymbNumFn :: Type -> Type -> Type where
 
   SymbNegate :: AdditiveGroup a => SymbNumFn a a
   SymbAdd :: AdditiveGroup a => SymbNumFn (a,a) a
+  SymbSubtract :: AdditiveGroup a => SymbNumFn (a,a) a
   SymbMul :: VectorSpace v => SymbNumFn (Scalar v, v) v
   SymbInnerProd :: InnerSpace v => SymbNumFn (v, v) (Scalar v)
 
   SymbAbs :: Num a => SymbNumFn a a
   SymbRelu :: Num a => SymbNumFn a a
+  SymbSignum :: Num a => SymbNumFn a a
 
   SymbRecip :: Fractional a => SymbNumFn a a
   SymbDiv :: (VectorSpace v, Fractional (Scalar v))
@@ -119,4 +121,47 @@ instance PointAgent SymbNumVal SymbNumFn a x where
   point = genericPoint
 
 
+instance AdditiveGroup x => AdditiveGroup (SymbNumVal a x) where
+  zeroV = point zeroV
+  (^+^) = genericAgentCombine SymbAdd
+  (^-^) = genericAgentCombine SymbSubtract
+  negateV = genericAgentMap SymbNegate
 
+instance VectorSpace v => VectorSpace (SymbNumVal a v) where
+  type Scalar (SymbNumVal a v) = SymbNumVal a (Scalar v)
+  (*^) = genericAgentCombine SymbMul
+
+instance (VectorSpace n, Num n, n ~ Scalar n)
+            => Num (SymbNumVal a n) where
+  fromInteger = point . fromInteger
+  (+) = (^+^)
+  (-) = (^-^)
+  (*) = (*^)
+  negate = negateV
+  abs = genericAgentMap SymbAbs
+  signum = genericAgentMap SymbSignum
+
+instance (VectorSpace n, Fractional n, n ~ Scalar n)
+            => Fractional (SymbNumVal a n) where
+  fromRational = point . fromRational
+  (/) = genericAgentCombine SymbDiv
+
+instance (VectorSpace n, Floating n, n ~ Scalar n)
+            => Floating (SymbNumVal a n) where
+  pi = point pi
+  exp = genericAgentMap SymbExp
+  log = genericAgentMap SymbLog
+  logBase = genericAgentCombine SymbLogBase
+  sqrt = genericAgentMap SymbSqrt
+  sin = genericAgentMap SymbSin
+  cos = genericAgentMap SymbCos
+  tan = genericAgentMap SymbTan
+  sinh = genericAgentMap SymbSinh
+  cosh = genericAgentMap SymbCosh
+  tanh = genericAgentMap SymbTanh
+  asin = genericAgentMap SymbAsin
+  acos = genericAgentMap SymbAcos
+  atan = genericAgentMap SymbAtan
+  asinh = genericAgentMap SymbAsinh
+  acosh = genericAgentMap SymbAcosh
+  atanh = genericAgentMap SymbAtanh
