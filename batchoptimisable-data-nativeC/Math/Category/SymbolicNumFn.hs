@@ -165,3 +165,49 @@ instance (VectorSpace n, Floating n, n ~ Scalar n)
   asinh = genericAgentMap SymbAsinh
   acosh = genericAgentMap SymbAcosh
   atanh = genericAgentMap SymbAtanh
+
+
+instance EnhancedCat (->) SymbNumFn where
+  arr (SymbConst c) _ = c
+  arr SymbId x = x
+
+  arr (SymbCompo f g) x = (arr f . arr g) x
+  arr (SymbPar f g) (x,y) = (f$x, g$y)
+  arr SymbCopy x = (x,x)
+  arr SymbSwap (x,y) = (y,x)
+  arr SymbRegroup (x,(y,z)) = ((x,y),z)
+  arr SymbRegroup' ((x,y),z) = (x,(y,z))
+  arr SymbFst (x,_) = x
+  arr SymbSnd (_,y) = y
+
+  arr SymbNegate x = negateV x
+  arr SymbAdd (x,y) = x^+^y
+  arr SymbSubtract (x,y) = x^-^y
+  arr SymbMul (μ,v) = μ*^v
+  arr SymbInnerProd (v,w) = v<.>w
+
+  arr SymbAbs x = abs x
+  arr SymbRelu x = 2*abs x - x
+  arr SymbSignum x = signum x
+
+  arr SymbRecip x = recip x
+  arr SymbDiv (x,y) = x^/y
+
+  arr SymbExp x = exp x
+  arr SymbLog x = log x
+  arr SymbLogBase (b,e) = logBase b e
+  arr SymbSqrt x = sqrt x
+  arr SymbPow (x,y) = x**y
+
+  arr SymbSin x = sin x
+  arr SymbCos x = cos x
+  arr SymbTan x = tan x
+  arr SymbAsin x = asin x
+  arr SymbAcos x = acos x
+  arr SymbAtan x = atan x
+  arr SymbSinh x = sinh x
+  arr SymbCosh x = cosh x
+  arr SymbTanh x = tanh x
+  arr SymbAsinh x = asinh x
+  arr SymbAcosh x = acosh x
+  arr SymbAtanh x = atanh x
