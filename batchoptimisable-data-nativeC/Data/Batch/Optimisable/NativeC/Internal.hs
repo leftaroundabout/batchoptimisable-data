@@ -172,6 +172,10 @@ C.include "<string.h>"
 class VS.Storable c => CHandleable c where
   callocArray :: CInt -> IO (Ptr c)
   releaseArray :: Ptr c -> IO ()
+  makeArrayConst :: Ptr c -- ^ Array to modify
+             -> CInt      -- ^ Number of elements to update
+             -> c         -- ^ Value that each value in array should take
+             -> IO ()
   memcpyArray :: (Ptr c, CInt) -- ^ Target, with offset
               -> (Ptr c, CInt) -- ^ Source, with offset
               -> CInt          -- ^ Number of elements
@@ -187,6 +191,10 @@ class (VU.Unbox t, CHandleable (CCType t)) => CPortable t where
 instance CHandleable CInt where
   callocArray nElems = [C.exp| int* {calloc($(int nElems), sizeof(int))} |]
   releaseArray loc = [C.block| void { free ($(int* loc)); } |]
+  makeArrayConst loc nElems c
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         $(int* loc)[i] = $(int c);
+                     } } |]
   memcpyArray (tgt, tOffs) (src, sOffs) nElems
     = [C.block| void { memcpy( $(int* tgt) + $(int tOffs)
                              , $(int* src) + $(int sOffs)
@@ -200,6 +208,10 @@ instance CPortable Int32 where
 instance CHandleable CLong where
   callocArray nElems = [C.exp| long* {calloc($(int nElems), sizeof(long))} |]
   releaseArray loc = [C.block| void { free ($(long* loc)); } |]
+  makeArrayConst loc nElems c
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         $(long* loc)[i] = $(long c);
+                     } } |]
   memcpyArray (tgt, tOffs) (src, sOffs) nElems
     = [C.block| void { memcpy( $(long* tgt) + $(int tOffs)
                              , $(long* src) + $(int sOffs)
@@ -213,6 +225,10 @@ instance CPortable Int where
 instance CHandleable CFloat where
   callocArray nElems = [C.exp| float* {calloc($(int nElems), sizeof(float))} |]
   releaseArray loc = [C.block| void { free ($(float* loc)); } |]
+  makeArrayConst loc nElems c
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         $(float* loc)[i] = $(float c);
+                     } } |]
   memcpyArray (tgt, tOffs) (src, sOffs) nElems
     = [C.block| void { memcpy( $(float* tgt) + $(int tOffs)
                              , $(float* src) + $(int sOffs)
@@ -226,6 +242,10 @@ instance CPortable Float where
 instance CHandleable CDouble where
   callocArray nElems = [C.exp| double* {calloc($(int nElems), sizeof(double))} |]
   releaseArray loc = [C.block| void { free ($(double* loc)); } |]
+  makeArrayConst loc nElems c
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         $(double* loc)[i] = $(double c);
+                     } } |]
   memcpyArray (tgt, tOffs) (src, sOffs) nElems
     = [C.block| void { memcpy( $(double* tgt) + $(int tOffs)
                              , $(double* src) + $(int sOffs)
@@ -269,3 +289,18 @@ instance ∀ dims t . (KnownShape dims, CPortable t)
       MultiArray <$> freezeFromC tgt
     return (peekd, mempty)
 
+
+numFmapArrayBatchOptimised :: ∀ a b dims s τ
+      . ( CPortable a, CPortable b, Real b, Fractional (CCType b)
+        , KnownShape dims, Foldable τ )
+    => SymbNumFn a b -> Optimised (MultiArray dims a) s τ
+           -> OptimiseM s (Optimised (MultiArray dims b) s τ)
+numFmapArrayBatchOptimised SymbId v = pure v
+numFmapArrayBatchOptimised (SymbConst c) (OptdArr shp _) = OptimiseM $ \_ -> do
+   let nArr = fromIntegral . product $ shape @dims
+       nBatch = Foldable.length shp
+       nElems = nArr * fromIntegral nBatch
+   loc <- callocArray nElems
+   makeArrayConst loc nElems $ realToFrac c
+   return ( OptdArr shp loc
+          , pure $ RscReleaseHook (releaseArray loc) )
