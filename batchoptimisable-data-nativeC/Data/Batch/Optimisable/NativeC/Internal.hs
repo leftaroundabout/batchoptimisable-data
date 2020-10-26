@@ -267,6 +267,12 @@ instance CPortable Double where
                          $(double* tgt)[$(int tOffs)+i]
                              = fabs($(double* src)[$(int sOffs)+i]);
                      } } |]
+  mapPrimitiveNumFunctionToArray SymbRelu (tgt, tOffs) (src, sOffs) nElems
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = r>0? r : 0;
+                     } } |]
 
 mapPrimitiveNumFunctionOnArray :: CPortable t
     => SymbNumFn t t -> Ptr (CCType t) -> CInt -> IO (Ptr (CCType t))
@@ -316,7 +322,7 @@ primitiveNumFmapArrayBatchOptimised f (OptdArr shp src) = OptimiseM $ \_ -> do
    let nArr = fromIntegral . product $ shape @dims
        nBatch = Foldable.length shp
        nElems = nArr * fromIntegral nBatch
-   res <- mapPrimitiveNumFunctionOnArray f src nElems 
+   res <- mapPrimitiveNumFunctionOnArray f src nElems
    return ( OptdArr shp res
           , pure $ RscReleaseHook (releaseArray res) )
 
@@ -334,3 +340,5 @@ numFmapArrayBatchOptimised (SymbConst c) (OptdArr shp _) = OptimiseM $ \_ -> do
    makeArrayConst loc nElems $ realToFrac c
    return ( OptdArr shp loc
           , pure $ RscReleaseHook (releaseArray loc) )
+numFmapArrayBatchOptimised f@SymbAbs v = primitiveNumFmapArrayBatchOptimised f v
+numFmapArrayBatchOptimised f@SymbRelu v = primitiveNumFmapArrayBatchOptimised f v
