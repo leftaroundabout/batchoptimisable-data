@@ -8,24 +8,25 @@
 -- Portability : portable
 -- 
 
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE TypeInType           #-}
-{-# LANGUAGE KindSignatures       #-}
-{-# LANGUAGE RankNTypes           #-}
-{-# LANGUAGE UnicodeSyntax        #-}
-{-# LANGUAGE TypeOperators        #-}
-{-# LANGUAGE DeriveFunctor        #-}
-{-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE AllowAmbiguousTypes  #-}
-{-# LANGUAGE TypeApplications     #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TupleSections        #-}
-{-# LANGUAGE QuasiQuotes          #-}
-{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE TypeInType             #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE UnicodeSyntax          #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE DeriveFunctor          #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE AllowAmbiguousTypes    #-}
+{-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TupleSections          #-}
+{-# LANGUAGE QuasiQuotes            #-}
+{-# LANGUAGE TemplateHaskell        #-}
 
 
 module Data.Batch.Optimisable.NativeC.Internal where
@@ -340,22 +341,26 @@ primitiveNumFmapArrayBatchOptimised f (OptdArr shp src) = OptimiseM $ \_ -> do
    return ( OptdArr shp res
           , pure $ RscReleaseHook (releaseArray res) )
 
+type family OptResArray r (dims :: [Nat]) = ora | ora -> r dims
+
 class OptimisedResult r where
-  type OptResArray r (dims :: [Nat]) :: Type
-  numFmapArrayBatchOptimised :: ∀ a b dims s τ
-      . ( CPortable a, KnownShape dims, Foldable τ )
-    => SymbNumFn a r -> Optimised (MultiArray dims a) s τ
+  numFmapArrayBatchOptimised :: ∀ a dims s τ
+      . ( BatchOptimisable (OptResArray a dims), KnownShape dims, Traversable τ )
+    => SymbNumFn a r -> Optimised (OptResArray a dims) s τ
            -> OptimiseM s (Optimised (OptResArray r dims) s τ)
 
 numFmapArrayScalarBatchOptimised :: ∀ a b dims s τ
-      . ( CPortable a, OptimisedResult b
-        , CPortable b, Real b
+      . ( BatchOptimisable (OptResArray a dims)
+        , OptimisedResult b, CPortable b, Real b
         , Fractional (CCType b), CNum (CCType b)
-        , KnownShape dims, Foldable τ )
-    => SymbNumFn a b -> Optimised (MultiArray dims a) s τ
+        , OptResArray b dims ~ MultiArray dims b
+        , KnownShape dims, Traversable τ )
+    => SymbNumFn a b -> Optimised (OptResArray a dims) s τ
            -> OptimiseM s (Optimised (MultiArray dims b) s τ)
 numFmapArrayScalarBatchOptimised SymbId v = pure v
-numFmapArrayScalarBatchOptimised (SymbConst c) (OptdArr shp _) = OptimiseM $ \_ -> do
+numFmapArrayScalarBatchOptimised (SymbConst c) i = do
+  shp <- peekBatchShape i
+  OptimiseM $ \_ -> do
    let nArr = fromIntegral . product $ shape @dims
        nBatch = Foldable.length shp
        nElems = nArr * fromIntegral nBatch
@@ -363,7 +368,8 @@ numFmapArrayScalarBatchOptimised (SymbConst c) (OptdArr shp _) = OptimiseM $ \_ 
    makeArrayConst loc nElems $ realToFrac c
    return ( OptdArr shp loc
           , pure $ RscReleaseHook (releaseArray loc) )
-numFmapArrayScalarBatchOptimised (SymbCompo SymbAdd g) x@(OptdArr shp _) = do
+numFmapArrayScalarBatchOptimised (SymbCompo SymbAdd g) x = do
+   shp <- peekBatchShape x
    OptimisedTuple (OptdArr _ vLoc) (OptdArr _ wLoc)
                    <- numFmapArrayBatchOptimised g x
    OptimiseM $ \_ -> do
@@ -374,17 +380,28 @@ numFmapArrayScalarBatchOptimised (SymbCompo SymbAdd g) x@(OptdArr shp _) = do
       addArrays (rLoc,0) (vLoc,0) (wLoc,0) nElems
       return ( OptdArr shp rLoc
              , pure $ RscReleaseHook (releaseArray rLoc) )
-    
+
 numFmapArrayScalarBatchOptimised f@SymbAbs v = primitiveNumFmapArrayBatchOptimised f v
 numFmapArrayScalarBatchOptimised f@SymbRelu v = primitiveNumFmapArrayBatchOptimised f v
 
+type instance OptResArray Double dims = MultiArray dims Double
 instance OptimisedResult Double where
-  type OptResArray Double dims = MultiArray dims Double
   numFmapArrayBatchOptimised = numFmapArrayScalarBatchOptimised
 
+numFmapArrayTupleBatchOptimised :: ∀ a b c dims s τ
+    . ( OptimisedResult b, OptimisedResult c
+      , BatchOptimisable (OptResArray a dims), KnownShape dims, Traversable τ )
+  => SymbNumFn a (b,c) -> Optimised (OptResArray a dims) s τ
+         -> OptimiseM s (Optimised (OptResArray b dims, OptResArray c dims) s τ)
+numFmapArrayTupleBatchOptimised SymbCopy v = return $ OptimisedTuple v v
+numFmapArrayTupleBatchOptimised (SymbConst (β,γ)) v = do
+   βv <- numFmapArrayBatchOptimised (SymbConst β) v
+   γv <- numFmapArrayBatchOptimised (SymbConst γ) v
+   return $ OptimisedTuple βv γv
+numFmapArrayTupleBatchOptimised (SymbCompo (SymbPar SymbId SymbId) h) v
+  = numFmapArrayBatchOptimised h v
+
+type instance OptResArray (b,c) dims = (OptResArray b dims, OptResArray c dims)
 instance (OptimisedResult b, OptimisedResult c)
       => OptimisedResult (b,c) where
-  type OptResArray (b,c) dims = (MultiArray dims b, MultiArray dims c)
-  numFmapArrayBatchOptimised SymbCopy v = return $ OptimisedTuple v v
-  numFmapArrayBatchOptimised (SymbCompo (SymbPar SymbId SymbId) h) v
-    = numFmapArrayBatchOptimised h v
+  numFmapArrayBatchOptimised = numFmapArrayTupleBatchOptimised
