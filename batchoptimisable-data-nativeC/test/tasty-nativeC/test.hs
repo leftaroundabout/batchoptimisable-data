@@ -10,6 +10,8 @@
 
 {-# LANGUAGE ScopedTypeVariables, DataKinds #-}
 {-# LANGUAGE TypeFamilies, TypeOperators  #-}
+{-# LANGUAGE RankNTypes, UnicodeSyntax   #-}
+{-# LANGUAGE ConstraintKinds              #-}
 
 import qualified Prelude as Hask
 import Control.Category.Constrained.Prelude
@@ -29,11 +31,15 @@ import Math.LinearMap.Category
 import Math.Category.SymbolicNumFunction
 
 import GHC.Exts (IsList(..))
+import GHC.TypeLits (KnownNat)
 import Control.Arrow (first)
 
 
 type T dims = MultiArray dims Double
 type dims++>dims' = T dims +> T dims'
+
+type EqShow t = (Eq t, Show t)
+
 
 main :: IO ()
 main = do
@@ -104,14 +110,25 @@ main = do
                    (numFmapArrayBatchOptimised SymbRelu)
                                         l )
                        === (mapArray (\x -> if x>0 then x else 0) <$> l)
-     , testProperty "Simple addition"
-      $ \(l :: [CDoubleArray 57])
-            -> runWithCapabilities cpb (optimiseBatch
-                   (numFmapArrayBatchOptimised (alg (\x -> x+x)))
-                                        l )
-                       === (mapArray (*2) <$> l)
+     , testProperty "Constant addition"
+      $ \(l :: [CDoubleArray 17])
+            -> optimisedFmapCorrect cpb (\x -> x+1) l
+     , testProperty "Self-addition"
+      $ \(l :: [CDoubleArray 9])
+            -> optimisedFmapCorrect cpb (\x -> x+x) l
+     , testProperty "Polynomial"
+      $ \(l :: [CDoubleArray 5])
+            -> optimisedFmapCorrect cpb (\x -> x^3 + 4*x - 7) l
      ]
    ]
+
+optimisedFmapCorrect :: ( KnownNat n, Hask.Traversable t
+                        , EqShow (t (CDoubleArray n)) )
+      => SystemCapabilities -> (∀ n . Floating n => n -> n)
+                  -> t (CDoubleArray n) -> QC.Property
+optimisedFmapCorrect cpb f l = runWithCapabilities cpb (optimiseBatch
+                   (numFmapArrayBatchOptimised (alg f)) l )
+                       === (mapArray f <$> l)
 
 infix 4 ≈≈≈
 (≈≈≈) :: (Eq v, Show v, InnerSpace v, Scalar v ~ Double)
