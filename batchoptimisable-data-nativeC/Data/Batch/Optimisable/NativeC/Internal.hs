@@ -340,14 +340,22 @@ primitiveNumFmapArrayBatchOptimised f (OptdArr shp src) = OptimiseM $ \_ -> do
    return ( OptdArr shp res
           , pure $ RscReleaseHook (releaseArray res) )
 
-numFmapArrayBatchOptimised :: ∀ a b dims s τ
-      . ( CPortable a, CPortable b, Real b
+class OptimisedResult r where
+  type OptResArray r (dims :: [Nat]) :: Type
+  numFmapArrayBatchOptimised :: ∀ a b dims s τ
+      . ( CPortable a, KnownShape dims, Foldable τ )
+    => SymbNumFn a r -> Optimised (MultiArray dims a) s τ
+           -> OptimiseM s (Optimised (OptResArray r dims) s τ)
+
+numFmapArrayScalarBatchOptimised :: ∀ a b dims s τ
+      . ( CPortable a, OptimisedResult b
+        , CPortable b, Real b
         , Fractional (CCType b), CNum (CCType b)
         , KnownShape dims, Foldable τ )
     => SymbNumFn a b -> Optimised (MultiArray dims a) s τ
            -> OptimiseM s (Optimised (MultiArray dims b) s τ)
-numFmapArrayBatchOptimised SymbId v = pure v
-numFmapArrayBatchOptimised (SymbConst c) (OptdArr shp _) = OptimiseM $ \_ -> do
+numFmapArrayScalarBatchOptimised SymbId v = pure v
+numFmapArrayScalarBatchOptimised (SymbConst c) (OptdArr shp _) = OptimiseM $ \_ -> do
    let nArr = fromIntegral . product $ shape @dims
        nBatch = Foldable.length shp
        nElems = nArr * fromIntegral nBatch
@@ -355,9 +363,9 @@ numFmapArrayBatchOptimised (SymbConst c) (OptdArr shp _) = OptimiseM $ \_ -> do
    makeArrayConst loc nElems $ realToFrac c
    return ( OptdArr shp loc
           , pure $ RscReleaseHook (releaseArray loc) )
-numFmapArrayBatchOptimised (SymbCompo SymbAdd g) x@(OptdArr shp _) = do
+numFmapArrayScalarBatchOptimised (SymbCompo SymbAdd g) x@(OptdArr shp _) = do
    OptimisedTuple (OptdArr _ vLoc) (OptdArr _ wLoc)
-                   <- numFmapArrayPairBatchOptimised g x
+                   <- numFmapArrayBatchOptimised g x
    OptimiseM $ \_ -> do
       let nArr = fromIntegral . product $ shape @dims
           nBatch = Foldable.length shp
@@ -367,16 +375,16 @@ numFmapArrayBatchOptimised (SymbCompo SymbAdd g) x@(OptdArr shp _) = do
       return ( OptdArr shp rLoc
              , pure $ RscReleaseHook (releaseArray rLoc) )
     
-numFmapArrayBatchOptimised f@SymbAbs v = primitiveNumFmapArrayBatchOptimised f v
-numFmapArrayBatchOptimised f@SymbRelu v = primitiveNumFmapArrayBatchOptimised f v
+numFmapArrayScalarBatchOptimised f@SymbAbs v = primitiveNumFmapArrayBatchOptimised f v
+numFmapArrayScalarBatchOptimised f@SymbRelu v = primitiveNumFmapArrayBatchOptimised f v
 
-numFmapArrayPairBatchOptimised :: ∀ a b c dims s τ
-      . ( CPortable a
-        , CPortable b, Real b, Fractional (CCType b)
-        , CPortable c, Real c, Fractional (CCType c)
-        , KnownShape dims, Foldable τ )
-    => SymbNumFn a (b,c) -> Optimised (MultiArray dims a) s τ
-           -> OptimiseM s (Optimised (MultiArray dims b, MultiArray dims c) s τ)
-numFmapArrayPairBatchOptimised SymbCopy v = return $ OptimisedTuple v v
-numFmapArrayPairBatchOptimised (SymbCompo (SymbPar SymbId SymbId) h) v
-    = numFmapArrayPairBatchOptimised h v
+instance OptimisedResult Double where
+  type OptResArray Double dims = MultiArray dims Double
+  numFmapArrayBatchOptimised = numFmapArrayScalarBatchOptimised
+
+instance (OptimisedResult b, OptimisedResult c)
+      => OptimisedResult (b,c) where
+  type OptResArray (b,c) dims = (MultiArray dims b, MultiArray dims c)
+  numFmapArrayBatchOptimised SymbCopy v = return $ OptimisedTuple v v
+  numFmapArrayBatchOptimised (SymbCompo (SymbPar SymbId SymbId) h) v
+    = numFmapArrayBatchOptimised h v
