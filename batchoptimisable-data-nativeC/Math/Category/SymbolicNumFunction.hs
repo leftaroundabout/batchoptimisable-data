@@ -63,24 +63,15 @@ data SymbNumFn :: (Type -> Constraint) -> Type -> Type -> Type where
   SymbDiv :: (VectorSpace v, Fractional (Scalar v))
                   => SymbNumFn ζ (v, Scalar v) v
 
-  SymbExp, SymbLog :: Floating a => SymbNumFn ζ a a
-  -- SymbLog :: Floating a => SymbNumFn ζ a a
-  SymbLogBase :: Floating a => SymbNumFn ζ (a,a) a
-  SymbSqrt :: Floating a => SymbNumFn ζ a a
   SymbPow :: Floating a => SymbNumFn ζ (a,a) a
+  SymbLogBase :: Floating a => SymbNumFn ζ (a,a) a
 
-  SymbSin :: Floating a => SymbNumFn ζ a a
-  SymbCos :: Floating a => SymbNumFn ζ a a
-  SymbTan :: Floating a => SymbNumFn ζ a a
-  SymbAsin :: Floating a => SymbNumFn ζ a a
-  SymbAcos :: Floating a => SymbNumFn ζ a a
-  SymbAtan :: Floating a => SymbNumFn ζ a a
-  SymbSinh :: Floating a => SymbNumFn ζ a a
-  SymbCosh :: Floating a => SymbNumFn ζ a a
-  SymbTanh :: Floating a => SymbNumFn ζ a a
-  SymbAsinh :: Floating a => SymbNumFn ζ a a
-  SymbAcosh :: Floating a => SymbNumFn ζ a a
-  SymbAtanh :: Floating a => SymbNumFn ζ a a
+  SymbElementaryFloating :: Floating a => SymbElementaryFlFn a a -> SymbNumFn ζ a a
+
+data SymbElementaryFlFn :: Type -> Type -> Type where
+  SymbExp, SymbLog, SymbSqrt, SymbSin, SymbCos, SymbTan, SymbAsin, SymbAcos
+   , SymbAtan, SymbSinh, SymbCosh, SymbTanh, SymbAsinh, SymbAcosh, SymbAtanh
+      :: SymbElementaryFlFn a a
 
 
 instance Category (SymbNumFn ζ) where
@@ -152,22 +143,22 @@ instance (VectorSpace n, Fractional n, n ~ Scalar n, ζ (), ζ n)
 instance (VectorSpace n, Floating n, n ~ Scalar n, ζ (), ζ n)
             => Floating (SymbNumVal ζ a n) where
   pi = point pi
-  exp = genericAgentMap SymbExp
-  log = genericAgentMap SymbLog
   logBase = genericAgentCombine SymbLogBase
-  sqrt = genericAgentMap SymbSqrt
-  sin = genericAgentMap SymbSin
-  cos = genericAgentMap SymbCos
-  tan = genericAgentMap SymbTan
-  sinh = genericAgentMap SymbSinh
-  cosh = genericAgentMap SymbCosh
-  tanh = genericAgentMap SymbTanh
-  asin = genericAgentMap SymbAsin
-  acos = genericAgentMap SymbAcos
-  atan = genericAgentMap SymbAtan
-  asinh = genericAgentMap SymbAsinh
-  acosh = genericAgentMap SymbAcosh
-  atanh = genericAgentMap SymbAtanh
+  exp = genericAgentMap $ SymbElementaryFloating SymbExp
+  log = genericAgentMap $ SymbElementaryFloating SymbLog
+  sqrt = genericAgentMap $ SymbElementaryFloating SymbSqrt
+  sin = genericAgentMap $ SymbElementaryFloating SymbSin
+  cos = genericAgentMap $ SymbElementaryFloating SymbCos
+  tan = genericAgentMap $ SymbElementaryFloating SymbTan
+  sinh = genericAgentMap $ SymbElementaryFloating SymbSinh
+  cosh = genericAgentMap $ SymbElementaryFloating SymbCosh
+  tanh = genericAgentMap $ SymbElementaryFloating SymbTanh
+  asin = genericAgentMap $ SymbElementaryFloating SymbAsin
+  acos = genericAgentMap $ SymbElementaryFloating SymbAcos
+  atan = genericAgentMap $ SymbElementaryFloating SymbAtan
+  asinh = genericAgentMap $ SymbElementaryFloating SymbAsinh
+  acosh = genericAgentMap $ SymbElementaryFloating SymbAcosh
+  atanh = genericAgentMap $ SymbElementaryFloating SymbAtanh
 
 
 instance EnhancedCat (->) (SymbNumFn ζ) where
@@ -196,21 +187,22 @@ instance EnhancedCat (->) (SymbNumFn ζ) where
   arr SymbRecip x = recip x
   arr SymbDiv (x,y) = x^/y
 
-  arr SymbExp x = exp x
-  arr SymbLog x = log x
   arr SymbLogBase (b,e) = logBase b e
-  arr SymbSqrt x = sqrt x
   arr SymbPow (x,y) = x**y
 
-  arr SymbSin x = sin x
-  arr SymbCos x = cos x
-  arr SymbTan x = tan x
-  arr SymbAsin x = asin x
-  arr SymbAcos x = acos x
-  arr SymbAtan x = atan x
-  arr SymbSinh x = sinh x
-  arr SymbCosh x = cosh x
-  arr SymbTanh x = tanh x
-  arr SymbAsinh x = asinh x
-  arr SymbAcosh x = acosh x
-  arr SymbAtanh x = atanh x
+  arr (SymbElementaryFloating SymbExp) x = exp x
+  arr (SymbElementaryFloating SymbLog) x = log x
+  arr (SymbElementaryFloating SymbSqrt) x = sqrt x
+
+  arr (SymbElementaryFloating SymbSin) x = sin x
+  arr (SymbElementaryFloating SymbCos) x = cos x
+  arr (SymbElementaryFloating SymbTan) x = tan x
+  arr (SymbElementaryFloating SymbAsin) x = asin x
+  arr (SymbElementaryFloating SymbAcos) x = acos x
+  arr (SymbElementaryFloating SymbAtan) x = atan x
+  arr (SymbElementaryFloating SymbSinh) x = sinh x
+  arr (SymbElementaryFloating SymbCosh) x = cosh x
+  arr (SymbElementaryFloating SymbTanh) x = tanh x
+  arr (SymbElementaryFloating SymbAsinh) x = asinh x
+  arr (SymbElementaryFloating SymbAcosh) x = acosh x
+  arr (SymbElementaryFloating SymbAtanh) x = atanh x
