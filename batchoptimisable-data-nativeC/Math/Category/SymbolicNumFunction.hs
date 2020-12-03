@@ -49,29 +49,30 @@ data SymbNumFn :: (Type -> Constraint) -> Type -> Type -> Type where
   SymbFst :: SymbNumFn ζ (a,b) a
   SymbSnd :: SymbNumFn ζ (a,b) b
 
-  SymbNegate :: AdditiveGroup a => SymbNumFn ζ a a
-  SymbAdd :: AdditiveGroup a => SymbNumFn ζ (a,a) a
-  SymbSubtract :: AdditiveGroup a => SymbNumFn ζ (a,a) a
+  SymbUnaryElementary :: SymbNumUnaryElementaryFn a -> SymbNumFn ζ a a
+  SymbBinaryElementary :: SymbNumBinaryElementaryFn a -> SymbNumFn ζ (a,a) a
   SymbMul :: VectorSpace v => SymbNumFn ζ (Scalar v, v) v
   SymbInnerProd :: (InnerSpace v, ζ v) => SymbNumFn ζ (v, v) (Scalar v)
-
-  SymbAbs :: Num a => SymbNumFn ζ a a
-  SymbRelu :: Num a => SymbNumFn ζ a a
-  SymbSignum :: Num a => SymbNumFn ζ a a
-
-  SymbRecip :: Fractional a => SymbNumFn ζ a a
   SymbDiv :: (VectorSpace v, Fractional (Scalar v))
                   => SymbNumFn ζ (v, Scalar v) v
 
-  SymbPow :: Floating a => SymbNumFn ζ (a,a) a
-  SymbLogBase :: Floating a => SymbNumFn ζ (a,a) a
 
-  SymbElementaryFloating :: Floating a => SymbElementaryFlFn a a -> SymbNumFn ζ a a
+data SymbNumUnaryElementaryFn a where
+  SymbNegate :: AdditiveGroup a => SymbNumUnaryElementaryFn a
+  SymbAbs, SymbRelu, SymbSignum :: Num a => SymbNumUnaryElementaryFn a
+  SymbRecip :: Fractional a => SymbNumUnaryElementaryFn a
+  SymbElementaryFloating
+     :: Floating a => SymbElementaryFlFn a -> SymbNumUnaryElementaryFn a
 
-data SymbElementaryFlFn :: Type -> Type -> Type where
+data SymbElementaryFlFn :: Type -> Type where
   SymbExp, SymbLog, SymbSqrt, SymbSin, SymbCos, SymbTan, SymbAsin, SymbAcos
    , SymbAtan, SymbSinh, SymbCosh, SymbTanh, SymbAsinh, SymbAcosh, SymbAtanh
-      :: SymbElementaryFlFn a a
+      :: SymbElementaryFlFn a
+
+data SymbNumBinaryElementaryFn a where
+  SymbAdd, SymbSubtract :: AdditiveGroup a => SymbNumBinaryElementaryFn a
+  SymbPow :: Floating a => SymbNumBinaryElementaryFn a
+  SymbLogBase :: Floating a => SymbNumBinaryElementaryFn a
 
 
 instance Category (SymbNumFn ζ) where
@@ -117,9 +118,9 @@ instance (ζ (), ζ x) => PointAgent (SymbNumVal ζ) (SymbNumFn ζ) a x where
 
 instance (AdditiveGroup x, ζ (), ζ x) => AdditiveGroup (SymbNumVal ζ a x) where
   zeroV = point zeroV
-  (^+^) = genericAgentCombine SymbAdd
-  (^-^) = genericAgentCombine SymbSubtract
-  negateV = genericAgentMap SymbNegate
+  (^+^) = genericAgentCombine (SymbBinaryElementary SymbAdd)
+  (^-^) = genericAgentCombine (SymbBinaryElementary SymbSubtract)
+  negateV = genericAgentMap (SymbUnaryElementary SymbNegate)
 
 instance (VectorSpace v, ζ (), ζ v) => VectorSpace (SymbNumVal ζ a v) where
   type Scalar (SymbNumVal ζ a v) = SymbNumVal ζ a (Scalar v)
@@ -132,33 +133,38 @@ instance (VectorSpace n, Num n, n ~ Scalar n, ζ (), ζ n)
   (-) = (^-^)
   (*) = (*^)
   negate = negateV
-  abs = genericAgentMap SymbAbs
-  signum = genericAgentMap SymbSignum
+  abs = genericAgentMap (SymbUnaryElementary SymbAbs)
+  signum = genericAgentMap (SymbUnaryElementary SymbSignum)
 
 instance (VectorSpace n, Fractional n, n ~ Scalar n, ζ (), ζ n)
             => Fractional (SymbNumVal ζ a n) where
   fromRational = point . fromRational
+  recip = genericAgentMap (SymbUnaryElementary SymbRecip)
   (/) = genericAgentCombine SymbDiv
+
+floatingAgentMap :: (VectorSpace n, Floating n, n ~ Scalar n, ζ (), ζ n)
+     => SymbElementaryFlFn n -> SymbNumVal ζ a n -> SymbNumVal ζ a n
+floatingAgentMap = genericAgentMap . SymbUnaryElementary . SymbElementaryFloating
 
 instance (VectorSpace n, Floating n, n ~ Scalar n, ζ (), ζ n)
             => Floating (SymbNumVal ζ a n) where
   pi = point pi
-  logBase = genericAgentCombine SymbLogBase
-  exp = genericAgentMap $ SymbElementaryFloating SymbExp
-  log = genericAgentMap $ SymbElementaryFloating SymbLog
-  sqrt = genericAgentMap $ SymbElementaryFloating SymbSqrt
-  sin = genericAgentMap $ SymbElementaryFloating SymbSin
-  cos = genericAgentMap $ SymbElementaryFloating SymbCos
-  tan = genericAgentMap $ SymbElementaryFloating SymbTan
-  sinh = genericAgentMap $ SymbElementaryFloating SymbSinh
-  cosh = genericAgentMap $ SymbElementaryFloating SymbCosh
-  tanh = genericAgentMap $ SymbElementaryFloating SymbTanh
-  asin = genericAgentMap $ SymbElementaryFloating SymbAsin
-  acos = genericAgentMap $ SymbElementaryFloating SymbAcos
-  atan = genericAgentMap $ SymbElementaryFloating SymbAtan
-  asinh = genericAgentMap $ SymbElementaryFloating SymbAsinh
-  acosh = genericAgentMap $ SymbElementaryFloating SymbAcosh
-  atanh = genericAgentMap $ SymbElementaryFloating SymbAtanh
+  logBase = genericAgentCombine (SymbBinaryElementary SymbLogBase)
+  exp = floatingAgentMap SymbExp
+  log = floatingAgentMap SymbLog
+  sqrt = floatingAgentMap SymbSqrt
+  sin = floatingAgentMap SymbSin
+  cos = floatingAgentMap SymbCos
+  tan = floatingAgentMap SymbTan
+  sinh = floatingAgentMap SymbSinh
+  cosh = floatingAgentMap SymbCosh
+  tanh = floatingAgentMap SymbTanh
+  asin = floatingAgentMap SymbAsin
+  acos = floatingAgentMap SymbAcos
+  atan = floatingAgentMap SymbAtan
+  asinh = floatingAgentMap SymbAsinh
+  acosh = floatingAgentMap SymbAcosh
+  atanh = floatingAgentMap SymbAtanh
 
 
 instance EnhancedCat (->) (SymbNumFn ζ) where
@@ -174,35 +180,36 @@ instance EnhancedCat (->) (SymbNumFn ζ) where
   arr SymbFst (x,_) = x
   arr SymbSnd (_,y) = y
 
-  arr SymbNegate x = negateV x
-  arr SymbAdd (x,y) = x^+^y
-  arr SymbSubtract (x,y) = x^-^y
   arr SymbMul (μ,v) = μ*^v
   arr SymbInnerProd (v,w) = v<.>w
-
-  arr SymbAbs x = abs x
-  arr SymbRelu x = 2*abs x - x
-  arr SymbSignum x = signum x
-
-  arr SymbRecip x = recip x
   arr SymbDiv (x,y) = x^/y
 
-  arr SymbLogBase (b,e) = logBase b e
-  arr SymbPow (x,y) = x**y
+  arr (SymbUnaryElementary f) x = case f of
+    SymbAbs -> abs x
+    SymbNegate -> negateV x
+    SymbRelu -> 2*abs x - x
+    SymbSignum -> signum x
+    SymbRecip -> recip x
+    SymbElementaryFloating 𝑓 -> case 𝑓 of
+       SymbExp -> exp x
+       SymbLog -> log x
+       SymbSqrt -> sqrt x
+       SymbSin -> sin x
+       SymbCos -> cos x
+       SymbTan -> tan x
+       SymbAsin -> asin x
+       SymbAcos -> acos x
+       SymbAtan -> atan x
+       SymbSinh -> sinh x
+       SymbCosh -> cosh x
+       SymbTanh -> tanh x
+       SymbAsinh -> asinh x
+       SymbAcosh -> acosh x
+       SymbAtanh -> atanh x
+      
+  arr (SymbBinaryElementary f) (x,y) = case f of
+     SymbAdd -> x^+^y
+     SymbSubtract -> x^-^y
+     SymbLogBase -> logBase x y
+     SymbPow -> x**y
 
-  arr (SymbElementaryFloating SymbExp) x = exp x
-  arr (SymbElementaryFloating SymbLog) x = log x
-  arr (SymbElementaryFloating SymbSqrt) x = sqrt x
-
-  arr (SymbElementaryFloating SymbSin) x = sin x
-  arr (SymbElementaryFloating SymbCos) x = cos x
-  arr (SymbElementaryFloating SymbTan) x = tan x
-  arr (SymbElementaryFloating SymbAsin) x = asin x
-  arr (SymbElementaryFloating SymbAcos) x = acos x
-  arr (SymbElementaryFloating SymbAtan) x = atan x
-  arr (SymbElementaryFloating SymbSinh) x = sinh x
-  arr (SymbElementaryFloating SymbCosh) x = cosh x
-  arr (SymbElementaryFloating SymbTanh) x = tanh x
-  arr (SymbElementaryFloating SymbAsinh) x = asinh x
-  arr (SymbElementaryFloating SymbAcosh) x = acosh x
-  arr (SymbElementaryFloating SymbAtanh) x = atanh x
