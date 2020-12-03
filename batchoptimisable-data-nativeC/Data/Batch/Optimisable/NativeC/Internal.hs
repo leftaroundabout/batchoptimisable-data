@@ -190,7 +190,7 @@ class (VU.Unbox t, CHandleable (CCType t)) => CPortable t where
   freezeFromC :: PrimMonad m
     => VSM.MVector (PrimState m) (CCType t) -> m (VU.Vector t)
   mapPrimitiveNumFunctionToArray
-              :: SymbNumFn t t          -- ^ Function to map
+              :: SymbNumFn ζ t t        -- ^ Function to map
               -> (Ptr (CCType t), CInt) -- ^ Target, with offset
               -> (Ptr (CCType t), CInt) -- ^ Source, with offset
               -> CInt                   -- ^ Number of elements
@@ -290,7 +290,7 @@ instance CPortable Double where
                      } } |]
 
 mapPrimitiveNumFunctionOnArray :: CPortable t
-    => SymbNumFn t t -> Ptr (CCType t) -> CInt -> IO (Ptr (CCType t))
+    => SymbNumFn ζ t t -> Ptr (CCType t) -> CInt -> IO (Ptr (CCType t))
 mapPrimitiveNumFunctionOnArray f src nElems = do
    tgt <- callocArray nElems
    mapPrimitiveNumFunctionToArray f (tgt,0) (src,0) nElems
@@ -329,9 +329,9 @@ instance ∀ dims t . (KnownShape dims, CPortable t)
       MultiArray <$> freezeFromC tgt
     return (peekd, mempty)
 
-primitiveNumFmapArrayBatchOptimised :: ∀ a dims s τ
+primitiveNumFmapArrayBatchOptimised :: ∀ a dims s τ ζ
       . ( CPortable a, KnownShape dims, Foldable τ )
-    => SymbNumFn a a -> Optimised (MultiArray dims a) s τ
+    => SymbNumFn ζ a a -> Optimised (MultiArray dims a) s τ
            -> OptimiseM s (Optimised (MultiArray dims a) s τ)
 primitiveNumFmapArrayBatchOptimised f (OptdArr shp src) = OptimiseM $ \_ -> do
    let nArr = fromIntegral . product $ shape @dims

@@ -18,6 +18,7 @@
 {-# LANGUAGE TypeInType            #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE InstanceSigs          #-}
 {-# LANGUAGE UnicodeSyntax         #-}
 
@@ -32,107 +33,109 @@ import Data.AdditiveGroup
 import Data.VectorSpace
 
 import Data.Kind (Type)
+import GHC.Exts (Constraint)
 
 
-data SymbNumFn :: Type -> Type -> Type where
-  SymbConst :: c -> SymbNumFn a c
-  SymbId :: SymbNumFn a a
+data SymbNumFn :: (Type -> Constraint) -> Type -> Type -> Type where
+  SymbConst :: ζ c => c -> SymbNumFn ζ a c
+  SymbId :: SymbNumFn ζ a a
 
-  SymbCompo :: SymbNumFn b c -> SymbNumFn a b -> SymbNumFn a c
-  SymbPar :: SymbNumFn a b -> SymbNumFn α β -> SymbNumFn (a,α) (b,β)
-  SymbCopy :: SymbNumFn a (a,a)
-  SymbSwap :: SymbNumFn (a,b) (b,a)
-  SymbRegroup :: SymbNumFn (a,(b,c)) ((a,b),c)
-  SymbRegroup' :: SymbNumFn ((a,b),c) (a,(b,c))
-  SymbFst :: SymbNumFn (a,b) a
-  SymbSnd :: SymbNumFn (a,b) b
+  SymbCompo :: SymbNumFn ζ b c -> SymbNumFn ζ a b -> SymbNumFn ζ a c
+  SymbPar :: SymbNumFn ζ a b -> SymbNumFn ζ α β -> SymbNumFn ζ (a,α) (b,β)
+  SymbCopy :: SymbNumFn ζ a (a,a)
+  SymbSwap :: SymbNumFn ζ (a,b) (b,a)
+  SymbRegroup :: SymbNumFn ζ (a,(b,c)) ((a,b),c)
+  SymbRegroup' :: SymbNumFn ζ ((a,b),c) (a,(b,c))
+  SymbFst :: SymbNumFn ζ (a,b) a
+  SymbSnd :: SymbNumFn ζ (a,b) b
 
-  SymbNegate :: AdditiveGroup a => SymbNumFn a a
-  SymbAdd :: AdditiveGroup a => SymbNumFn (a,a) a
-  SymbSubtract :: AdditiveGroup a => SymbNumFn (a,a) a
-  SymbMul :: VectorSpace v => SymbNumFn (Scalar v, v) v
-  SymbInnerProd :: InnerSpace v => SymbNumFn (v, v) (Scalar v)
+  SymbNegate :: AdditiveGroup a => SymbNumFn ζ a a
+  SymbAdd :: AdditiveGroup a => SymbNumFn ζ (a,a) a
+  SymbSubtract :: AdditiveGroup a => SymbNumFn ζ (a,a) a
+  SymbMul :: VectorSpace v => SymbNumFn ζ (Scalar v, v) v
+  SymbInnerProd :: (InnerSpace v, ζ v) => SymbNumFn ζ (v, v) (Scalar v)
 
-  SymbAbs :: Num a => SymbNumFn a a
-  SymbRelu :: Num a => SymbNumFn a a
-  SymbSignum :: Num a => SymbNumFn a a
+  SymbAbs :: Num a => SymbNumFn ζ a a
+  SymbRelu :: Num a => SymbNumFn ζ a a
+  SymbSignum :: Num a => SymbNumFn ζ a a
 
-  SymbRecip :: Fractional a => SymbNumFn a a
+  SymbRecip :: Fractional a => SymbNumFn ζ a a
   SymbDiv :: (VectorSpace v, Fractional (Scalar v))
-                  => SymbNumFn (v, Scalar v) v
+                  => SymbNumFn ζ (v, Scalar v) v
 
-  SymbExp :: Floating a => SymbNumFn a a
-  SymbLog :: Floating a => SymbNumFn a a
-  SymbLogBase :: Floating a => SymbNumFn (a,a) a
-  SymbSqrt :: Floating a => SymbNumFn a a
-  SymbPow :: Floating a => SymbNumFn (a,a) a
+  SymbExp, SymbLog :: Floating a => SymbNumFn ζ a a
+  -- SymbLog :: Floating a => SymbNumFn ζ a a
+  SymbLogBase :: Floating a => SymbNumFn ζ (a,a) a
+  SymbSqrt :: Floating a => SymbNumFn ζ a a
+  SymbPow :: Floating a => SymbNumFn ζ (a,a) a
 
-  SymbSin :: Floating a => SymbNumFn a a
-  SymbCos :: Floating a => SymbNumFn a a
-  SymbTan :: Floating a => SymbNumFn a a
-  SymbAsin :: Floating a => SymbNumFn a a
-  SymbAcos :: Floating a => SymbNumFn a a
-  SymbAtan :: Floating a => SymbNumFn a a
-  SymbSinh :: Floating a => SymbNumFn a a
-  SymbCosh :: Floating a => SymbNumFn a a
-  SymbTanh :: Floating a => SymbNumFn a a
-  SymbAsinh :: Floating a => SymbNumFn a a
-  SymbAcosh :: Floating a => SymbNumFn a a
-  SymbAtanh :: Floating a => SymbNumFn a a
+  SymbSin :: Floating a => SymbNumFn ζ a a
+  SymbCos :: Floating a => SymbNumFn ζ a a
+  SymbTan :: Floating a => SymbNumFn ζ a a
+  SymbAsin :: Floating a => SymbNumFn ζ a a
+  SymbAcos :: Floating a => SymbNumFn ζ a a
+  SymbAtan :: Floating a => SymbNumFn ζ a a
+  SymbSinh :: Floating a => SymbNumFn ζ a a
+  SymbCosh :: Floating a => SymbNumFn ζ a a
+  SymbTanh :: Floating a => SymbNumFn ζ a a
+  SymbAsinh :: Floating a => SymbNumFn ζ a a
+  SymbAcosh :: Floating a => SymbNumFn ζ a a
+  SymbAtanh :: Floating a => SymbNumFn ζ a a
 
 
-instance Category SymbNumFn where
+instance Category (SymbNumFn ζ) where
   id = SymbId
   (.) = SymbCompo
 
-instance Cartesian SymbNumFn where
+instance ζ () => Cartesian (SymbNumFn ζ) where
   swap = SymbSwap
   attachUnit = id &&& terminal
   detachUnit = fst
   regroup = SymbRegroup
   regroup' = SymbRegroup'
 
-instance Morphism SymbNumFn where
+instance ζ () => Morphism (SymbNumFn ζ) where
   (***) = SymbPar
 
-instance PreArrow SymbNumFn where
-  f&&&g = (f***g) . SymbCopy
+instance ζ () => PreArrow (SymbNumFn ζ) where
+  f&&&g = SymbCompo (SymbPar f g) SymbCopy
   terminal = SymbConst ()
   fst = SymbFst
   snd = SymbSnd
 
-instance WellPointed SymbNumFn where
+instance ζ () => WellPointed (SymbNumFn ζ) where
+  type PointObject (SymbNumFn ζ) o = ζ o
   const = SymbConst
   unit = pure ()
 
-type SymbNumVal = GenericAgent SymbNumFn
+type SymbNumVal ζ = GenericAgent (SymbNumFn ζ)
 
-instance HasAgent SymbNumFn where
-  type AgentVal SymbNumFn a v = SymbNumVal a v
+instance HasAgent (SymbNumFn ζ) where
+  type AgentVal (SymbNumFn ζ) a v = SymbNumVal ζ a v
   alg = genericAlg
   ($~) = genericAgentMap
 
-instance CartesianAgent SymbNumFn where
+instance ζ () => CartesianAgent (SymbNumFn ζ) where
   alg1to2 = genericAlg1to2
   alg2to1 = genericAlg2to1
   alg2to2 = genericAlg2to2
 
-instance PointAgent SymbNumVal SymbNumFn a x where
+instance (ζ (), ζ x) => PointAgent (SymbNumVal ζ) (SymbNumFn ζ) a x where
   point = genericPoint
 
 
-instance AdditiveGroup x => AdditiveGroup (SymbNumVal a x) where
+instance (AdditiveGroup x, ζ (), ζ x) => AdditiveGroup (SymbNumVal ζ a x) where
   zeroV = point zeroV
   (^+^) = genericAgentCombine SymbAdd
   (^-^) = genericAgentCombine SymbSubtract
   negateV = genericAgentMap SymbNegate
 
-instance VectorSpace v => VectorSpace (SymbNumVal a v) where
-  type Scalar (SymbNumVal a v) = SymbNumVal a (Scalar v)
+instance (VectorSpace v, ζ (), ζ v) => VectorSpace (SymbNumVal ζ a v) where
+  type Scalar (SymbNumVal ζ a v) = SymbNumVal ζ a (Scalar v)
   (*^) = genericAgentCombine SymbMul
 
-instance (VectorSpace n, Num n, n ~ Scalar n)
-            => Num (SymbNumVal a n) where
+instance (VectorSpace n, Num n, n ~ Scalar n, ζ (), ζ n)
+            => Num (SymbNumVal ζ a n) where
   fromInteger = point . fromInteger
   (+) = (^+^)
   (-) = (^-^)
@@ -141,13 +144,13 @@ instance (VectorSpace n, Num n, n ~ Scalar n)
   abs = genericAgentMap SymbAbs
   signum = genericAgentMap SymbSignum
 
-instance (VectorSpace n, Fractional n, n ~ Scalar n)
-            => Fractional (SymbNumVal a n) where
+instance (VectorSpace n, Fractional n, n ~ Scalar n, ζ (), ζ n)
+            => Fractional (SymbNumVal ζ a n) where
   fromRational = point . fromRational
   (/) = genericAgentCombine SymbDiv
 
-instance (VectorSpace n, Floating n, n ~ Scalar n)
-            => Floating (SymbNumVal a n) where
+instance (VectorSpace n, Floating n, n ~ Scalar n, ζ (), ζ n)
+            => Floating (SymbNumVal ζ a n) where
   pi = point pi
   exp = genericAgentMap SymbExp
   log = genericAgentMap SymbLog
@@ -167,7 +170,7 @@ instance (VectorSpace n, Floating n, n ~ Scalar n)
   atanh = genericAgentMap SymbAtanh
 
 
-instance EnhancedCat (->) SymbNumFn where
+instance EnhancedCat (->) (SymbNumFn ζ) where
   arr (SymbConst c) _ = c
   arr SymbId x = x
 
