@@ -386,6 +386,22 @@ class OptimisedNumArg a where
       => ( (OptimisedNumArg x, OptimisedNumArg y)
           => φ ) -> φ
 
+numFmapArrayGenericBatchOptimised_cps :: ∀ a b dims s τ φ
+      . ( OptimisedNumArg a
+        , KnownShape dims, Traversable τ )
+    => SymbNumFn OptimisedNumArg a b
+        -> (OptimisedNumArg b =>
+              (Optimised (OptResArray a dims) s τ
+                 -> OptimiseM s (Optimised (OptResArray b dims) s τ))
+             -> φ ) -> φ
+numFmapArrayGenericBatchOptimised_cps SymbId q = q pure
+numFmapArrayGenericBatchOptimised_cps (SymbConst c) q = q (\i -> do
+  shp <- peekOptNumArgShape i
+  optimiseConstNumArg c shp
+ )
+numFmapArrayGenericBatchOptimised_cps (SymbCompo f g) q
+   = numFmapArrayBatchOptimised_compo_cps f g q
+
 numFmapArrayScalarBatchOptimised_cps :: ∀ a b dims s τ φ
       . ( OptimisedNumArg a
         , OptResArray a dims ~ MultiArray dims a
@@ -399,17 +415,6 @@ numFmapArrayScalarBatchOptimised_cps :: ∀ a b dims s τ φ
                  -> OptimiseM s (Optimised (OptResArray b dims) s τ))
              -> φ ) -> φ
 numFmapArrayScalarBatchOptimised_cps SymbId q = q pure
--- numFmapArrayScalarBatchOptimised (SymbConst c) i q = do
---   shp <- peekBatchShape i
---   optimiseConstNumArg c shp
---OptimiseM $ \_ -> do
--- let nArr = fromIntegral . product $ shape @dims
---     nBatch = Foldable.length shp
---     nElems = nArr * fromIntegral nBatch
--- loc <- callocArray nElems
--- makeArrayConst loc nElems $ realToFrac c
--- return ( OptdArr shp loc :: Optimised (OptResArray b dims) s τ
---        , pure $ RscReleaseHook (releaseArray loc) )
 -- numFmapArrayScalarBatchOptimised (SymbCompo (SymbBinaryElementary f) g) x = do
 --    shp <- peekOptNumArgShape x
 --    OptimisedTuple (OptdArr _ vLoc) (OptdArr _ wLoc)
@@ -443,6 +448,30 @@ numFmapArrayTupleBatchOptimised_cps :: ∀ a dims τ b c s φ
          ) -> φ
 numFmapArrayTupleBatchOptimised_cps f q = case numFmapArrayBatchOptimised_cps f of
     rf -> rf (\q'f -> useIndividualTupNumOpts @(b,c) @b @c q q'f)
+
+numFmapArrayBatchOptimised_compo_cps :: ∀ a b c dims τ s φ
+    . ( OptimisedNumArg a
+      , KnownShape dims, Traversable τ )
+  => SymbNumFn OptimisedNumArg b c -> SymbNumFn OptimisedNumArg a b
+      -> ( OptimisedNumArg c
+             => (Optimised (OptResArray a dims) s τ
+            -> OptimiseM s (Optimised (OptResArray c dims) s τ)
+             ) -> φ
+         ) -> φ
+numFmapArrayBatchOptimised_compo_cps f g q
+  = let rg :: (OptimisedNumArg b => (Optimised (OptResArray a dims) s τ
+                           -> OptimiseM s (Optimised (OptResArray b dims) s τ))
+                    -> φ ) -> φ
+        rg = numFmapArrayBatchOptimised_cps g
+    in rg (\q'g ->
+     let rf :: (OptimisedNumArg c => (Optimised (OptResArray b dims) s τ
+                                  -> OptimiseM s (Optimised (OptResArray c dims) s τ))
+                    -> φ ) -> φ
+         rf = numFmapArrayBatchOptimised_cps f
+     in rf (\q'f -> q (\x -> do
+            gvx <- q'g x
+            q'f gvx
+          )))
 
 numFmapArrayTupleBatchOptimised_par_cps :: ∀ x y dims τ b c s φ
     . ( OptimisedNumArg (x,y)
