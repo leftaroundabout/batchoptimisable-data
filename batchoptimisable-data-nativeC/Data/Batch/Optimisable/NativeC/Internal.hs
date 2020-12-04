@@ -195,6 +195,13 @@ class (VU.Unbox t, CHandleable (CCType t)) => CPortable t where
               -> (Ptr (CCType t), CInt) -- ^ Source, with offset
               -> CInt                   -- ^ Number of elements
               -> IO ()
+  zipPrimitiveNumFunctionToArray
+              :: SymbNumFn ζ (t,t) t    -- ^ Binary function to zip
+              -> (Ptr (CCType t), CInt) -- ^ Target, with offset
+              -> (Ptr (CCType t), CInt) -- ^ Source LHS, with offset
+              -> (Ptr (CCType t), CInt) -- ^ Source RHS, with offset
+              -> CInt                   -- ^ Number of elements
+              -> IO ()
 
 class CHandleable n => CNum n where
   addArrays ::   (Ptr n, CInt) -- ^ Target, with offset
@@ -297,6 +304,15 @@ mapPrimitiveNumFunctionOnArray f src nElems = do
    mapPrimitiveNumFunctionToArray f (tgt,0) (src,0) nElems
    return tgt
 
+zipPrimitiveNumFunctionOnArray :: CPortable t
+    => SymbNumFn ζ (t,t) t
+          -> Ptr (CCType t) -> Ptr (CCType t)
+             -> CInt -> IO (Ptr (CCType t))
+zipPrimitiveNumFunctionOnArray f srcL srcR nElems = do
+   tgt <- callocArray nElems
+   zipPrimitiveNumFunctionToArray f (tgt,0) (srcL,0) (srcR,0) nElems
+   return tgt
+
 instance ∀ dims t . (KnownShape dims, CPortable t)
               => BatchOptimisable (MultiArray dims t) where
   data Optimised (MultiArray dims t) s τ
@@ -359,6 +375,13 @@ class OptimisedNumArg a where
            -> OptimiseM s (Optimised (OptResArray r dims) s τ)
   numFmapArrayBatchOptimised f x
       = numFmapArrayBatchOptimised_cps f (\q -> q x)
+  numFmapArrayBatchTupleOptimised_cps :: ∀ b r dims s τ φ
+      . ( OptimisedNumArg b, KnownShape dims, Traversable τ )
+    => SymbNumFn OptimisedNumArg (a,b) r -> 
+             ( OptimisedNumArg r =>
+                 (Optimised (OptResArray a dims, OptResArray b dims) s τ
+                  -> OptimiseM s (Optimised (OptResArray r dims) s τ))
+                 -> φ ) -> φ
   useIndividualTupNumOpts :: ∀ x y φ . a ~ (x,y)
       => ( (OptimisedNumArg x, OptimisedNumArg y)
           => φ ) -> φ
@@ -407,6 +430,7 @@ numFmapArrayScalarBatchOptimised_cps f@(SymbUnaryElementary _) q
 type instance OptResArray Double dims = MultiArray dims Double
 instance OptimisedNumArg Double where
   numFmapArrayBatchOptimised_cps = numFmapArrayScalarBatchOptimised_cps
+  numFmapArrayBatchTupleOptimised_cps = numFmapArrayBatchScalarTupleOptimised_cps
 
 numFmapArrayTupleBatchOptimised_cps :: ∀ a dims τ b c s φ
     . ( OptimisedNumArg a
@@ -417,23 +441,8 @@ numFmapArrayTupleBatchOptimised_cps :: ∀ a dims τ b c s φ
             -> OptimiseM s (Optimised (OptResArray b dims, OptResArray c dims) s τ)
              ) -> φ
          ) -> φ
-numFmapArrayTupleBatchOptimised_cps SymbCopy q = q $ \v -> return $ OptimisedTuple v v
-numFmapArrayTupleBatchOptimised_cps (SymbConst (β,γ)) q = undefined {- q $ \v -> do
-   βv <- numFmapArrayBatchOptimised (SymbConst β) v
-   γv <- numFmapArrayBatchOptimised (SymbConst γ) v
-   return $ OptimisedTuple βv γv -}
-numFmapArrayTupleBatchOptimised_cps (SymbPar f g) q
-   = numFmapArrayTupleBatchOptimised_par_cps f g q
--- numFmapArrayTupleBatchOptimised_cps (SymbCompo (SymbPar f g) h) q
--- = case numFmapArrayTupleBatchOptimised_cps @a @dims @τ h of
---   rh -> rh (\q'h -> case ( numFmapArrayBatchOptimised_cps f
---                          , numFmapArrayBatchOptimised_cps g ) of
---     (rf, rg) -> _ {- rf (\q'f -> rg (\q'g -> q (\v -> do
---       OptimisedTuple hvx hvy <- q'h v
---       fhvx <- q'f hvx
---       ghvy <- q'g hvy
---       return $ OptimisedTuple fhvx ghvy
---      ))) -} )
+numFmapArrayTupleBatchOptimised_cps f q = case numFmapArrayBatchOptimised_cps f of
+    rf -> rf (\q'f -> useIndividualTupNumOpts @(b,c) @b @c q q'f)
 
 numFmapArrayTupleBatchOptimised_par_cps :: ∀ x y dims τ b c s φ
     . ( OptimisedNumArg (x,y)
@@ -446,21 +455,38 @@ numFmapArrayTupleBatchOptimised_par_cps :: ∀ x y dims τ b c s φ
          ) -> φ
 numFmapArrayTupleBatchOptimised_par_cps f g q
   = useIndividualTupNumOpts @(x,y) @x @y
-     (case ( undefined -- numFmapArrayBatchOptimised_cps f
-               :: (OptimisedNumArg b => (Optimised (OptResArray x dims) s τ
+     (let rf :: (OptimisedNumArg b => (Optimised (OptResArray x dims) s τ
                                   -> OptimiseM s (Optimised (OptResArray b dims) s τ))
                     -> φ ) -> φ
-           , undefined -- numFmapArrayBatchOptimised_cps g
-               :: (OptimisedNumArg c => (Optimised (OptResArray y dims) s τ
+          rf = numFmapArrayBatchOptimised_cps f
+          rg :: (OptimisedNumArg c => (Optimised (OptResArray y dims) s τ
                                   -> OptimiseM s (Optimised (OptResArray c dims) s τ))
                     -> φ ) -> φ
-           ) of
-        (rf, rg) -> rf undefined {- (\q'f -> rg (\q'g -> q (\(OptimisedTuple x y) -> do
+          rg = numFmapArrayBatchOptimised_cps g
+      in rf (\q'f -> rg (\q'g -> q (\(OptimisedTuple x y) -> do
             fhvx <- q'f x
             ghvy <- q'g y
             return $ OptimisedTuple fhvx ghvy
-         ))) -} )
+          ))))
+
+
+numFmapArrayBatchScalarTupleOptimised_cps :: ∀ a dims τ b c s φ
+    . ( OptimisedNumArg a, OptimisedNumArg b
+      , OptResArray a dims ~ MultiArray dims a
+      , CPortable a, Real a
+      , Fractional (CCType a), CNum (CCType a)
+      , BatchOptimisable (OptResArray a dims)
+      , KnownShape dims, Traversable τ )
+  => SymbNumFn OptimisedNumArg (a,b) c
+      -> ( OptimisedNumArg c
+             => (Optimised (OptResArray a dims, OptResArray b dims) s τ
+            -> OptimiseM s (Optimised (OptResArray c dims) s τ)
+             ) -> φ
+         ) -> φ
+numFmapArrayBatchScalarTupleOptimised_cps (SymbPar f g) q
+   = numFmapArrayTupleBatchOptimised_par_cps f g q
+
 type instance OptResArray (b,c) dims = (OptResArray b dims, OptResArray c dims)
 instance (OptimisedNumArg b, OptimisedNumArg c)
       => OptimisedNumArg (b,c) where
-  numFmapArrayBatchOptimised_cps = undefined
+  numFmapArrayBatchOptimised_cps = numFmapArrayBatchTupleOptimised_cps
