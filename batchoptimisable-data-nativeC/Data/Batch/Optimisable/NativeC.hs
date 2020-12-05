@@ -18,6 +18,7 @@ module Data.Batch.Optimisable.NativeC (
 
 import Data.Batch.Optimisable.NativeC.Internal
 import Data.Batch.Optimisable.NativeC.Instances ()
+import Data.Batch.Optimisable.NativeC.Instances.SymbNumFmapping ()
 import Data.Batch.Optimisable
 import Data.Batch.Optimisable.Unsafe
 

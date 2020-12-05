@@ -30,6 +30,7 @@ library
                      Math.Category.SymbolicNumFunction
   other-modules:
                      Data.Batch.Optimisable.NativeC.Instances
+                     Data.Batch.Optimisable.NativeC.Instances.SymbNumFmapping
   -- other-extensions:
   build-depends:       base >=4.10 && <4.14
                      , batchoptimisable-data==0.1.0.0
