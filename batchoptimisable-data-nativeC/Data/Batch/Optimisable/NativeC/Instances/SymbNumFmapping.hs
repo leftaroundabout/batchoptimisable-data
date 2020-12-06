@@ -38,7 +38,6 @@ import Data.Batch.Optimisable.NativeC.Internal
 import Math.Category.SymbolicNumFunction
 
 
-
 numFmapArrayGenericBatchOptimised_cps :: ∀ a b dims s τ φ
       . ( OptimisedNumArg a
         , KnownShape dims, Traversable τ )
@@ -54,6 +53,17 @@ numFmapArrayGenericBatchOptimised_cps (SymbConst c) q = q (\i -> do
  )
 numFmapArrayGenericBatchOptimised_cps (SymbCompo f g) q
    = numFmapArrayBatchOptimised_compo_cps f g q
+
+
+
+data UnitOptResArray dims = UnitOptResArray
+
+
+type instance OptResArray () dims = UnitOptResArray dims
+instance OptimisedNumArg () where
+  numFmapArrayBatchOptimised_cps = numFmapArrayGenericBatchOptimised_cps
+
+
 
 numFmapArrayScalarBatchOptimised_cps :: ∀ a b dims s τ φ
       . ( OptimisedNumArg a

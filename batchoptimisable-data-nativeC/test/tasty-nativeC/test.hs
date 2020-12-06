@@ -104,10 +104,10 @@ main = do
       $ \(l :: [CDoubleArray 57])
             -> runWithCapabilities cpb (optimiseBatch (numFmapArrayBatchOptimised id)
                                         l ) === l
-     , testProperty "Relu"
+     , testProperty "Absolute value"
       $ \(l :: [CDoubleArray 57])
             -> runWithCapabilities cpb (optimiseBatch
-                   (numFmapArrayBatchOptimised SymbRelu)
+                   (numFmapArrayBatchOptimised (alg abs))
                                         l )
                        === (mapArray (\x -> if x>0 then x else 0) <$> l)
      , testProperty "Constant addition"
