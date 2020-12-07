@@ -36,8 +36,11 @@ import Data.Batch.Optimisable
 import Data.Batch.Optimisable.Unsafe
 import Data.Batch.Optimisable.NativeC.Internal
 
-import Math.Category.SymbolicNumFunction
+import qualified Data.Foldable as Foldable
+
 import Data.VectorSpace
+
+import Math.Category.SymbolicNumFunction
 
 #ifdef DEBUG_SYMBNUMFN_FMAPPING
 import GHC.Stack (HasCallStack)
@@ -104,31 +107,16 @@ numFmapArrayScalarBatchOptimised_cps :: ∀ a b dims s τ φ
                  -> OptimiseM s (Optimised (OptResArray b dims) s τ))
              -> φ ) -> φ
 numFmapArrayScalarBatchOptimised_cps SymbId q = q pure
--- numFmapArrayScalarBatchOptimised (SymbCompo (SymbBinaryElementary f) g) x = do
---    shp <- peekOptNumArgShape x
---    OptimisedTuple (OptdArr _ vLoc) (OptdArr _ wLoc)
---        <- let dissect SymbCopy = numFmapArrayBatchOptimised SymbCopy x
---           in dissect g
---    OptimiseM $ \_ -> do
---       let nArr = fromIntegral . product $ shape @dims
---           nBatch = Foldable.length shp
---           nElems = nArr * fromIntegral nBatch
---       rLoc <- callocArray nElems
---       addArrays (rLoc,0) (vLoc,0) (wLoc,0) nElems
---       return ( OptdArr shp rLoc :: Optimised (OptResArray b dims) s τ
---              , pure $ RscReleaseHook (releaseArray rLoc) )
-
 numFmapArrayScalarBatchOptimised_cps f@(SymbUnaryElementary _) q
     = q $ primitiveNumFmapArrayBatchOptimised f
-#ifdef DEBUG_SYMBNUMFN_FMAPPING
-numFmapArrayScalarBatchOptimised_cps f _ = error
-    $ "Cannot handle " ++ show f
-#endif
+numFmapArrayScalarBatchOptimised_cps f q
+    = numFmapArrayGenericBatchOptimised_cps f q
 
 type instance OptResArray Double dims = MultiArray dims Double
 instance OptimisedNumArg Double where
   numFmapArrayBatchOptimised_cps = numFmapArrayScalarBatchOptimised_cps
   numFmapArrayBatchTupleOptimised_cps = numFmapArrayBatchScalarTupleOptimised_cps
+  peekOptNumArgBatchShape = fmap (fmap $ const ()) . peekOptimised
 
 numFmapArrayTupleBatchOptimised_cps :: ∀ a dims τ b c s φ
     . ( OptimisedNumArg a
@@ -216,6 +204,26 @@ numFmapArrayBatchScalarTupleOptimised_cps :: ∀ a dims τ b c s φ
          ) -> φ
 numFmapArrayBatchScalarTupleOptimised_cps (SymbPar f g) q
    = numFmapArrayTupleBatchOptimised_par_cps f g q
+-- numFmapArrayBatchScalarTupleOptimised_cps SymbScalarMul q
+  -- = numFmapArrayBatchScalarTupleOptimised_cps (SymbBinaryElementary SymbMul) q
+numFmapArrayBatchScalarTupleOptimised_cps (SymbBinaryElementary f) q = q
+ (\(OptimisedTuple x y) -> do
+   let (OptdArr shp vLoc, OptdArr _ wLoc) = (x,y)
+   OptimiseM $ \_ -> do
+      let nArr = fromIntegral . product $ shape @dims
+          nBatch = Foldable.length shp
+          nElems = nArr * fromIntegral nBatch
+      rLoc <- callocArray nElems
+      zipPrimitiveNumFunctionToArray (SymbBinaryElementary f)
+                 (rLoc,0) (vLoc,0) (wLoc,0) nElems
+      return ( OptdArr shp rLoc :: Optimised (OptResArray b dims) s τ
+             , pure $ RscReleaseHook (releaseArray rLoc) )
+ )
+
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+numFmapArrayBatchScalarTupleOptimised_cps f _ = error
+    $ "Cannot handle " ++ show f
+#endif
 
 type instance OptResArray (b,c) dims = (OptResArray b dims, OptResArray c dims)
 instance (OptimisedNumArg b, OptimisedNumArg c)
