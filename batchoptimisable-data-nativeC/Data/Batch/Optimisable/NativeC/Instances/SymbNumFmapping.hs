@@ -190,8 +190,8 @@ numFmapArrayTupleBatchOptimised_par_cps f g q
 numFmapArrayBatchScalarTupleOptimised_cps :: ∀ a dims τ b c s φ
     . ( OptimisedNumArg a, OptimisedNumArg b
       , OptResArray a dims ~ MultiArray dims a
-      , CPortable a, Real a
-      , Fractional (CCType a), CNum (CCType a)
+      , CPortable a, Real a, Scalar a ~ a
+      , Fractional (CCType a)
       , BatchOptimisable (OptResArray a dims)
 #ifdef DEBUG_SYMBNUMFN_FMAPPING
       , HasCallStack

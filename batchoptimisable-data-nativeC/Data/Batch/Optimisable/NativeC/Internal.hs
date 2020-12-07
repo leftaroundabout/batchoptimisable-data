@@ -205,12 +205,6 @@ class (VU.Unbox t, CHandleable (CCType t)) => CPortable t where
               -> CInt                   -- ^ Number of elements
               -> IO ()
 
-class CHandleable n => CNum n where
-  addArrays ::   (Ptr n, CInt) -- ^ Target, with offset
-              -> (Ptr n, CInt) -- ^ First source, with offset
-              -> (Ptr n, CInt) -- ^ Second source, with offset
-              -> CInt          -- ^ Number of elements
-              -> IO ()
 
 instance CHandleable CInt where
   callocArray nElems = [C.exp| int* {calloc($(int nElems), sizeof(int))} |]
@@ -275,13 +269,6 @@ instance CHandleable CDouble where
                              , $(double* src) + $(int sOffs)
                              , $(int nElems) * sizeof(double)
                              ); } |]
-instance CNum CDouble where
-  addArrays (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
-    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
-                         $(double* tgt)[$(int tOffs) + i]
-                             = $(double* src0)[$(int s0Offs) + i]
-                             + $(double* src1)[$(int s1Offs) + i];
-                     } } |]
 instance CPortable Double where
   type CCType Double = CDouble
   thawForC = VS.thaw . VS.map realToFrac . VU.convert
@@ -297,6 +284,13 @@ instance CPortable Double where
                          double r = $(double* src)[$(int sOffs)+i];
                          $(double* tgt)[$(int tOffs)+i]
                              = r<0? 0 : r;
+                     } } |]
+  zipPrimitiveNumFunctionToArray (SymbBinaryElementary SymbAdd)
+                      (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         $(double* tgt)[$(int tOffs) + i]
+                             = $(double* src0)[$(int s0Offs) + i]
+                             + $(double* src1)[$(int s1Offs) + i];
                      } } |]
 
 mapPrimitiveNumFunctionOnArray :: CPortable t
