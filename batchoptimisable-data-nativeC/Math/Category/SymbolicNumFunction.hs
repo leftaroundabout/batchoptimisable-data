@@ -52,7 +52,7 @@ data SymbNumFn :: (Type -> Constraint) -> Type -> Type -> Type where
 
   SymbUnaryElementary :: SymbNumUnaryElementaryFn a -> SymbNumFn ζ a a
   SymbBinaryElementary :: SymbNumBinaryElementaryFn a -> SymbNumFn ζ (a,a) a
-  SymbMul :: VectorSpace v => SymbNumFn ζ (Scalar v, v) v
+  SymbScalarMul :: VectorSpace v => SymbNumFn ζ (v, Scalar v) v
   SymbInnerProd :: (InnerSpace v, ζ v) => SymbNumFn ζ (v, v) (Scalar v)
   SymbDiv :: (VectorSpace v, Fractional (Scalar v))
                   => SymbNumFn ζ (v, Scalar v) v
@@ -80,6 +80,7 @@ data SymbNumBinaryElementaryFn a where
   SymbAdd, SymbSubtract :: AdditiveGroup a => SymbNumBinaryElementaryFn a
   SymbPow :: Floating a => SymbNumBinaryElementaryFn a
   SymbLogBase :: Floating a => SymbNumBinaryElementaryFn a
+  SymbMul :: Num a => SymbNumBinaryElementaryFn a
 
 deriving instance Show (SymbNumBinaryElementaryFn a)
 
@@ -133,14 +134,14 @@ instance (AdditiveGroup x, ζ (), ζ x) => AdditiveGroup (SymbNumVal ζ a x) whe
 
 instance (VectorSpace v, ζ (), ζ v) => VectorSpace (SymbNumVal ζ a v) where
   type Scalar (SymbNumVal ζ a v) = SymbNumVal ζ a (Scalar v)
-  (*^) = genericAgentCombine SymbMul
+  (*^) = flip $ genericAgentCombine SymbScalarMul
 
 instance (VectorSpace n, Num n, n ~ Scalar n, ζ (), ζ n)
             => Num (SymbNumVal ζ a n) where
   fromInteger = point . fromInteger
   (+) = (^+^)
   (-) = (^-^)
-  (*) = (*^)
+  (*) = genericAgentCombine (SymbBinaryElementary SymbMul)
   negate = negateV
   abs = genericAgentMap (SymbUnaryElementary SymbAbs)
   signum = genericAgentMap (SymbUnaryElementary SymbSignum)
@@ -189,7 +190,7 @@ instance EnhancedCat (->) (SymbNumFn ζ) where
   arr SymbFst (x,_) = x
   arr SymbSnd (_,y) = y
 
-  arr SymbMul (μ,v) = μ*^v
+  arr SymbScalarMul (v,μ) = μ*^v
   arr SymbInnerProd (v,w) = v<.>w
   arr SymbDiv (x,y) = x^/y
 
@@ -218,6 +219,7 @@ instance EnhancedCat (->) (SymbNumFn ζ) where
       
   arr (SymbBinaryElementary f) (x,y) = case f of
      SymbAdd -> x^+^y
+     SymbMul -> x*y
      SymbSubtract -> x^-^y
      SymbLogBase -> logBase x y
      SymbPow -> x**y
