@@ -229,5 +229,6 @@ type instance OptResArray (b,c) dims = (OptResArray b dims, OptResArray c dims)
 instance (OptimisedNumArg b, OptimisedNumArg c)
       => OptimisedNumArg (b,c) where
   numFmapArrayBatchOptimised_cps = numFmapArrayBatchTupleOptimised_cps
+  peekOptNumArgBatchShape (OptimisedTuple x _) = peekOptNumArgBatchShape x
   optimiseConstNumArg = undefined
-  peekOptNumArgBatchShape = undefined
+  useIndividualTupNumOpts q = q
