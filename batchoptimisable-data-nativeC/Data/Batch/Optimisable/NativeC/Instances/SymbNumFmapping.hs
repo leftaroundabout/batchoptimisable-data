@@ -37,6 +37,7 @@ import Data.Batch.Optimisable.Unsafe
 import Data.Batch.Optimisable.NativeC.Internal
 
 import Math.Category.SymbolicNumFunction
+import Data.VectorSpace
 
 #ifdef DEBUG_SYMBNUMFN_FMAPPING
 import GHC.Stack (HasCallStack)
@@ -54,8 +55,10 @@ numFmapArrayGenericBatchOptimised_cps :: ∀ a b dims s τ φ
                  -> OptimiseM s (Optimised (OptResArray b dims) s τ))
              -> φ ) -> φ
 numFmapArrayGenericBatchOptimised_cps SymbId q = q pure
+numFmapArrayGenericBatchOptimised_cps SymbCopy q = q
+    (\i -> return $ OptimisedTuple i i)
 numFmapArrayGenericBatchOptimised_cps (SymbConst c) q = q (\i -> do
-  shp <- peekOptNumArgShape i
+  shp <- peekOptNumArgBatchShape i
   optimiseConstNumArg c shp
  )
 numFmapArrayGenericBatchOptimised_cps (SymbCompo f g) q
@@ -69,10 +72,18 @@ numFmapArrayGenericBatchOptimised_cps f _ = error
 
 data UnitOptResArray dims = UnitOptResArray
 
-
 type instance OptResArray () dims = UnitOptResArray dims
+
+instance BatchOptimisable (UnitOptResArray dims) where
+  data Optimised (UnitOptResArray dims) s τ = OptUnitOptResArray (τ ())
+  allocateBatch = pure . OptUnitOptResArray . fmap (const ())
+  peekOptimised = pure . fmap (const UnitOptResArray)
+       . \(OptUnitOptResArray bshp) -> bshp
+  peekBatchShape = fmap (fmap $ const ()) . peekOptimised
+
 instance OptimisedNumArg () where
   numFmapArrayBatchOptimised_cps = numFmapArrayGenericBatchOptimised_cps
+  optimiseConstNumArg () = pure . OptUnitOptResArray
 
 
 
@@ -80,7 +91,7 @@ numFmapArrayScalarBatchOptimised_cps :: ∀ a b dims s τ φ
       . ( OptimisedNumArg a
         , OptResArray a dims ~ MultiArray dims a
         , CPortable a, Real a
-        , Fractional (CCType a), CNum (CCType a)
+        , Fractional (CCType a)
         , BatchOptimisable (OptResArray a dims)
         , KnownShape dims, Traversable τ
 #ifdef DEBUG_SYMBNUMFN_FMAPPING
@@ -210,3 +221,5 @@ type instance OptResArray (b,c) dims = (OptResArray b dims, OptResArray c dims)
 instance (OptimisedNumArg b, OptimisedNumArg c)
       => OptimisedNumArg (b,c) where
   numFmapArrayBatchOptimised_cps = numFmapArrayBatchTupleOptimised_cps
+  optimiseConstNumArg = undefined
+  peekOptNumArgBatchShape = undefined
