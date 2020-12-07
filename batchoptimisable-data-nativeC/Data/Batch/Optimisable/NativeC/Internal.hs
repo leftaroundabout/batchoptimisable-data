@@ -21,6 +21,7 @@
 {-# LANGUAGE UnicodeSyntax          #-}
 {-# LANGUAGE TypeOperators          #-}
 {-# LANGUAGE DeriveFunctor          #-}
+{-# LANGUAGE DefaultSignatures      #-}
 {-# LANGUAGE DataKinds              #-}
 {-# LANGUAGE AllowAmbiguousTypes    #-}
 {-# LANGUAGE TypeApplications       #-}
@@ -361,8 +362,22 @@ class
  Show a =>
 #endif
  OptimisedNumArg a where
-  peekOptNumArgShape :: Optimised (OptResArray a dims) s τ -> OptimiseM s (τ ())
-  optimiseConstNumArg :: a -> τ () -> OptimiseM s (Optimised (OptResArray a dims) s τ)
+  peekOptNumArgBatchShape :: (Traversable τ, KnownShape dims)
+      => Optimised (OptResArray a dims) s τ -> OptimiseM s (τ ())
+  default peekOptNumArgBatchShape
+     :: (Traversable τ, KnownShape dims, BatchOptimisable (OptResArray a dims))
+      => Optimised (OptResArray a dims) s τ -> OptimiseM s (τ ())
+  peekOptNumArgBatchShape = fmap (fmap $ const ()) . peekOptimised
+  optimiseConstNumArg :: (Traversable τ, KnownShape dims)
+      => a -> τ () -> OptimiseM s (Optimised (OptResArray a dims) s τ)
+  default optimiseConstNumArg
+      :: ∀ dims τ s
+          . ( Traversable τ, KnownShape dims
+            , BatchOptimisable (OptResArray a dims), VU.Unbox a
+            , OptResArray a dims ~ MultiArray dims a )
+      => a -> τ () -> OptimiseM s (Optimised (OptResArray a dims) s τ)
+  optimiseConstNumArg c
+      = allocateBatch . fmap (const $ constArray c)
   numFmapArrayBatchOptimised_cps :: ∀ r dims s τ φ
       . ( KnownShape dims, Traversable τ )
     => SymbNumFn OptimisedNumArg a r -> 
