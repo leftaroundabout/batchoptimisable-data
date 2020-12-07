@@ -230,5 +230,8 @@ instance (OptimisedNumArg b, OptimisedNumArg c)
       => OptimisedNumArg (b,c) where
   numFmapArrayBatchOptimised_cps = numFmapArrayBatchTupleOptimised_cps
   peekOptNumArgBatchShape (OptimisedTuple x _) = peekOptNumArgBatchShape x
-  optimiseConstNumArg = undefined
+  optimiseConstNumArg (l,r) shp = do
+     lo <- optimiseConstNumArg l shp
+     ro <- optimiseConstNumArg r shp
+     return $ OptimisedTuple lo ro
   useIndividualTupNumOpts q = q
