@@ -193,13 +193,13 @@ class (VU.Unbox t, CHandleable (CCType t)) => CPortable t where
   freezeFromC :: PrimMonad m
     => VSM.MVector (PrimState m) (CCType t) -> m (VU.Vector t)
   mapPrimitiveNumFunctionToArray
-              :: SymbNumFn ζ t t        -- ^ Function to map
+              :: SymbNumUnaryElementaryFn t        -- ^ Function to map
               -> (Ptr (CCType t), CInt) -- ^ Target, with offset
               -> (Ptr (CCType t), CInt) -- ^ Source, with offset
               -> CInt                   -- ^ Number of elements
               -> IO ()
   zipPrimitiveNumFunctionToArray
-              :: SymbNumFn OptimisedNumArg (t,t) t    -- ^ Binary function to zip
+              :: SymbNumBinaryElementaryFn t    -- ^ Binary function to zip
               -> (Ptr (CCType t), CInt) -- ^ Target, with offset
               -> (Ptr (CCType t), CInt) -- ^ Source LHS, with offset
               -> (Ptr (CCType t), CInt) -- ^ Source RHS, with offset
@@ -274,33 +274,33 @@ instance CPortable Double where
   type CCType Double = CDouble
   thawForC = VS.thaw . VS.map realToFrac . VU.convert
   freezeFromC = fmap (VU.convert . VS.map realToFrac) . VS.freeze
-  mapPrimitiveNumFunctionToArray (SymbUnaryElementary SymbAbs)
+  mapPrimitiveNumFunctionToArray SymbAbs
                              (tgt, tOffs) (src, sOffs) nElems
     = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
                          $(double* tgt)[$(int tOffs)+i]
                              = fabs($(double* src)[$(int sOffs)+i]);
                      } } |]
-  mapPrimitiveNumFunctionToArray (SymbUnaryElementary SymbRelu) (tgt, tOffs) (src, sOffs) nElems
+  mapPrimitiveNumFunctionToArray SymbRelu (tgt, tOffs) (src, sOffs) nElems
     = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
                          double r = $(double* src)[$(int sOffs)+i];
                          $(double* tgt)[$(int tOffs)+i]
                              = r<0? 0 : r;
                      } } |]
-  zipPrimitiveNumFunctionToArray (SymbBinaryElementary SymbAdd)
+  zipPrimitiveNumFunctionToArray SymbAdd
                       (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
     = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
                          $(double* tgt)[$(int tOffs) + i]
                              = $(double* src0)[$(int s0Offs) + i]
                              + $(double* src1)[$(int s1Offs) + i];
                      } } |]
-  zipPrimitiveNumFunctionToArray (SymbBinaryElementary SymbSubtract)
+  zipPrimitiveNumFunctionToArray SymbSubtract
                       (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
     = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
                          $(double* tgt)[$(int tOffs) + i]
                              = $(double* src0)[$(int s0Offs) + i]
                              - $(double* src1)[$(int s1Offs) + i];
                      } } |]
-  zipPrimitiveNumFunctionToArray (SymbBinaryElementary SymbMul)
+  zipPrimitiveNumFunctionToArray SymbMul
                       (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
     = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
                          $(double* tgt)[$(int tOffs) + i]
@@ -313,14 +313,14 @@ instance CPortable Double where
 #endif
 
 mapPrimitiveNumFunctionOnArray :: CPortable t
-    => SymbNumFn ζ t t -> Ptr (CCType t) -> CInt -> IO (Ptr (CCType t))
+    => SymbNumUnaryElementaryFn t -> Ptr (CCType t) -> CInt -> IO (Ptr (CCType t))
 mapPrimitiveNumFunctionOnArray f src nElems = do
    tgt <- callocArray nElems
    mapPrimitiveNumFunctionToArray f (tgt,0) (src,0) nElems
    return tgt
 
 zipPrimitiveNumFunctionOnArray :: CPortable t
-    => SymbNumFn OptimisedNumArg (t,t) t
+    => SymbNumBinaryElementaryFn t
           -> Ptr (CCType t) -> Ptr (CCType t)
              -> CInt -> IO (Ptr (CCType t))
 zipPrimitiveNumFunctionOnArray f srcL srcR nElems = do
@@ -363,7 +363,7 @@ instance ∀ dims t . (KnownShape dims, CPortable t)
 
 primitiveNumFmapArrayBatchOptimised :: ∀ a dims s τ ζ
       . ( CPortable a, KnownShape dims, Foldable τ )
-    => SymbNumFn ζ a a -> Optimised (MultiArray dims a) s τ
+    => SymbNumUnaryElementaryFn a -> Optimised (MultiArray dims a) s τ
            -> OptimiseM s (Optimised (MultiArray dims a) s τ)
 primitiveNumFmapArrayBatchOptimised f (OptdArr shp src) = OptimiseM $ \_ -> do
    let nArr = fromIntegral . product $ shape @dims

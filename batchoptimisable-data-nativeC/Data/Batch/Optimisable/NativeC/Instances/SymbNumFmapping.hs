@@ -107,7 +107,7 @@ numFmapArrayScalarBatchOptimised_cps :: ∀ a b dims s τ φ
                  -> OptimiseM s (Optimised (OptResArray b dims) s τ))
              -> φ ) -> φ
 numFmapArrayScalarBatchOptimised_cps SymbId q = q pure
-numFmapArrayScalarBatchOptimised_cps f@(SymbUnaryElementary _) q
+numFmapArrayScalarBatchOptimised_cps (SymbUnaryElementary f) q
     = q $ primitiveNumFmapArrayBatchOptimised f
 numFmapArrayScalarBatchOptimised_cps f q
     = numFmapArrayGenericBatchOptimised_cps f q
@@ -204,8 +204,9 @@ numFmapArrayBatchScalarTupleOptimised_cps :: ∀ a dims τ b c s φ
          ) -> φ
 numFmapArrayBatchScalarTupleOptimised_cps (SymbPar f g) q
    = numFmapArrayTupleBatchOptimised_par_cps f g q
--- numFmapArrayBatchScalarTupleOptimised_cps SymbScalarMul q
-  -- = numFmapArrayBatchScalarTupleOptimised_cps (SymbBinaryElementary SymbMul) q
+numFmapArrayBatchScalarTupleOptimised_cps SymbScalarMul q
+   = numFmapArrayBatchScalarTupleOptimised_cps @a @dims @τ @a @a
+        (SymbBinaryElementary SymbMul) q
 numFmapArrayBatchScalarTupleOptimised_cps (SymbBinaryElementary f) q = q
  (\(OptimisedTuple x y) -> do
    let (OptdArr shp vLoc, OptdArr _ wLoc) = (x,y)
@@ -214,7 +215,7 @@ numFmapArrayBatchScalarTupleOptimised_cps (SymbBinaryElementary f) q = q
           nBatch = Foldable.length shp
           nElems = nArr * fromIntegral nBatch
       rLoc <- callocArray nElems
-      zipPrimitiveNumFunctionToArray (SymbBinaryElementary f)
+      zipPrimitiveNumFunctionToArray f
                  (rLoc,0) (vLoc,0) (wLoc,0) nElems
       return ( OptdArr shp rLoc :: Optimised (OptResArray b dims) s τ
              , pure $ RscReleaseHook (releaseArray rLoc) )
