@@ -14,6 +14,7 @@
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE StandaloneDeriving     #-}
 {-# LANGUAGE TypeInType             #-}
 {-# LANGUAGE KindSignatures         #-}
 {-# LANGUAGE RankNTypes             #-}
@@ -27,6 +28,7 @@
 {-# LANGUAGE TupleSections          #-}
 {-# LANGUAGE QuasiQuotes            #-}
 {-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE CPP                    #-}
 
 
 module Data.Batch.Optimisable.NativeC.Internal where
@@ -360,7 +362,11 @@ primitiveNumFmapArrayBatchOptimised f (OptdArr shp src) = OptimiseM $ \_ -> do
 
 type family OptResArray r (dims :: [Nat]) = ora | ora -> r dims
 
-class OptimisedNumArg a where
+class
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+ Show a =>
+#endif
+ OptimisedNumArg a where
   peekOptNumArgShape :: Optimised (OptResArray a dims) s τ -> OptimiseM s (τ ())
   optimiseConstNumArg :: a -> τ () -> OptimiseM s (Optimised (OptResArray a dims) s τ)
   numFmapArrayBatchOptimised_cps :: ∀ r dims s τ φ
@@ -385,4 +391,8 @@ class OptimisedNumArg a where
   useIndividualTupNumOpts :: ∀ x y φ . a ~ (x,y)
       => ( (OptimisedNumArg x, OptimisedNumArg y)
           => φ ) -> φ
+
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+deriving instance Show (SymbNumFn OptimisedNumArg a b)
+#endif
 

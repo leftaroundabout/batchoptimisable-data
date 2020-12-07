@@ -27,6 +27,7 @@
 {-# LANGUAGE TupleSections          #-}
 {-# LANGUAGE QuasiQuotes            #-}
 {-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE CPP                    #-}
 
 
 module Data.Batch.Optimisable.NativeC.Instances.SymbNumFmapping where
@@ -37,9 +38,15 @@ import Data.Batch.Optimisable.NativeC.Internal
 
 import Math.Category.SymbolicNumFunction
 
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+import GHC.Stack (HasCallStack)
+#endif
 
 numFmapArrayGenericBatchOptimised_cps :: ∀ a b dims s τ φ
       . ( OptimisedNumArg a
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+        , HasCallStack
+#endif
         , KnownShape dims, Traversable τ )
     => SymbNumFn OptimisedNumArg a b
         -> (OptimisedNumArg b =>
@@ -53,6 +60,10 @@ numFmapArrayGenericBatchOptimised_cps (SymbConst c) q = q (\i -> do
  )
 numFmapArrayGenericBatchOptimised_cps (SymbCompo f g) q
    = numFmapArrayBatchOptimised_compo_cps f g q
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+numFmapArrayGenericBatchOptimised_cps f _ = error
+    $ "Cannot handle " ++ show f
+#endif
 
 
 
@@ -71,7 +82,11 @@ numFmapArrayScalarBatchOptimised_cps :: ∀ a b dims s τ φ
         , CPortable a, Real a
         , Fractional (CCType a), CNum (CCType a)
         , BatchOptimisable (OptResArray a dims)
-        , KnownShape dims, Traversable τ )
+        , KnownShape dims, Traversable τ
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+        , HasCallStack
+#endif
+        )
     => SymbNumFn OptimisedNumArg a b
         -> (OptimisedNumArg b =>
               (Optimised (OptResArray a dims) s τ
@@ -94,6 +109,10 @@ numFmapArrayScalarBatchOptimised_cps SymbId q = q pure
 
 numFmapArrayScalarBatchOptimised_cps f@(SymbUnaryElementary _) q
     = q $ primitiveNumFmapArrayBatchOptimised f
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+numFmapArrayScalarBatchOptimised_cps f _ = error
+    $ "Cannot handle " ++ show f
+#endif
 
 type instance OptResArray Double dims = MultiArray dims Double
 instance OptimisedNumArg Double where
@@ -102,6 +121,9 @@ instance OptimisedNumArg Double where
 
 numFmapArrayTupleBatchOptimised_cps :: ∀ a dims τ b c s φ
     . ( OptimisedNumArg a
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+      , HasCallStack
+#endif
       , KnownShape dims, Traversable τ )
   => SymbNumFn OptimisedNumArg a (b,c)
       -> ( (OptimisedNumArg b, OptimisedNumArg c)
@@ -138,6 +160,9 @@ numFmapArrayBatchOptimised_compo_cps f g q
 
 numFmapArrayTupleBatchOptimised_par_cps :: ∀ x y dims τ b c s φ
     . ( OptimisedNumArg (x,y)
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+      , HasCallStack
+#endif
       , KnownShape dims, Traversable τ )
   => SymbNumFn OptimisedNumArg x b -> SymbNumFn OptimisedNumArg y c
       -> ( (OptimisedNumArg b, OptimisedNumArg c)
@@ -168,6 +193,9 @@ numFmapArrayBatchScalarTupleOptimised_cps :: ∀ a dims τ b c s φ
       , CPortable a, Real a
       , Fractional (CCType a), CNum (CCType a)
       , BatchOptimisable (OptResArray a dims)
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+      , HasCallStack
+#endif
       , KnownShape dims, Traversable τ )
   => SymbNumFn OptimisedNumArg (a,b) c
       -> ( OptimisedNumArg c

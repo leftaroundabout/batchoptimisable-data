@@ -19,6 +19,7 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE InstanceSigs          #-}
 {-# LANGUAGE UnicodeSyntax         #-}
 
@@ -56,6 +57,7 @@ data SymbNumFn :: (Type -> Constraint) -> Type -> Type -> Type where
   SymbDiv :: (VectorSpace v, Fractional (Scalar v))
                   => SymbNumFn ζ (v, Scalar v) v
 
+deriving instance Show (SymbNumFn Show a b)
 
 data SymbNumUnaryElementaryFn a where
   SymbNegate :: AdditiveGroup a => SymbNumUnaryElementaryFn a
@@ -64,15 +66,22 @@ data SymbNumUnaryElementaryFn a where
   SymbElementaryFloating
      :: Floating a => SymbElementaryFlFn a -> SymbNumUnaryElementaryFn a
 
+deriving instance Show (SymbNumUnaryElementaryFn a)
+
+
 data SymbElementaryFlFn :: Type -> Type where
   SymbExp, SymbLog, SymbSqrt, SymbSin, SymbCos, SymbTan, SymbAsin, SymbAcos
    , SymbAtan, SymbSinh, SymbCosh, SymbTanh, SymbAsinh, SymbAcosh, SymbAtanh
       :: SymbElementaryFlFn a
 
+deriving instance Show (SymbElementaryFlFn a)
+
 data SymbNumBinaryElementaryFn a where
   SymbAdd, SymbSubtract :: AdditiveGroup a => SymbNumBinaryElementaryFn a
   SymbPow :: Floating a => SymbNumBinaryElementaryFn a
   SymbLogBase :: Floating a => SymbNumBinaryElementaryFn a
+
+deriving instance Show (SymbNumBinaryElementaryFn a)
 
 
 instance Category (SymbNumFn ζ) where
