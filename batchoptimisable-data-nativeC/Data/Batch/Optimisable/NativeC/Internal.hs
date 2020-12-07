@@ -199,7 +199,7 @@ class (VU.Unbox t, CHandleable (CCType t)) => CPortable t where
               -> CInt                   -- ^ Number of elements
               -> IO ()
   zipPrimitiveNumFunctionToArray
-              :: SymbNumFn ζ (t,t) t    -- ^ Binary function to zip
+              :: SymbNumFn OptimisedNumArg (t,t) t    -- ^ Binary function to zip
               -> (Ptr (CCType t), CInt) -- ^ Target, with offset
               -> (Ptr (CCType t), CInt) -- ^ Source LHS, with offset
               -> (Ptr (CCType t), CInt) -- ^ Source RHS, with offset
@@ -293,6 +293,24 @@ instance CPortable Double where
                              = $(double* src0)[$(int s0Offs) + i]
                              + $(double* src1)[$(int s1Offs) + i];
                      } } |]
+  zipPrimitiveNumFunctionToArray (SymbBinaryElementary SymbSubtract)
+                      (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         $(double* tgt)[$(int tOffs) + i]
+                             = $(double* src0)[$(int s0Offs) + i]
+                             - $(double* src1)[$(int s1Offs) + i];
+                     } } |]
+  zipPrimitiveNumFunctionToArray (SymbBinaryElementary SymbMul)
+                      (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         $(double* tgt)[$(int tOffs) + i]
+                             = $(double* src0)[$(int s0Offs) + i]
+                             * $(double* src1)[$(int s1Offs) + i];
+                     } } |]
+#ifdef DEBUG_SYMBNUMFN_FMAPPING
+  zipPrimitiveNumFunctionToArray f _ _ _ _
+    = error $ "Cannot zip function " ++ show f
+#endif
 
 mapPrimitiveNumFunctionOnArray :: CPortable t
     => SymbNumFn ζ t t -> Ptr (CCType t) -> CInt -> IO (Ptr (CCType t))
@@ -302,7 +320,7 @@ mapPrimitiveNumFunctionOnArray f src nElems = do
    return tgt
 
 zipPrimitiveNumFunctionOnArray :: CPortable t
-    => SymbNumFn ζ (t,t) t
+    => SymbNumFn OptimisedNumArg (t,t) t
           -> Ptr (CCType t) -> Ptr (CCType t)
              -> CInt -> IO (Ptr (CCType t))
 zipPrimitiveNumFunctionOnArray f srcL srcR nElems = do

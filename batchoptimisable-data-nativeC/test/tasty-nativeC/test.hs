@@ -109,7 +109,7 @@ main = do
             -> runWithCapabilities cpb (optimiseBatch
                    (numFmapArrayBatchOptimised (alg abs))
                                         l )
-                       === (mapArray (\x -> if x>0 then x else 0) <$> l)
+                       === (mapArray abs <$> l)
      , testProperty "Constant addition"
       $ \(l :: [CDoubleArray 17])
             -> optimisedFmapCorrect cpb (\x -> x+1) l
