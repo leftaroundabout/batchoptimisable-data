@@ -55,9 +55,9 @@ data SymbNumFn :: (Type -> Constraint) -> Type -> Type -> Type where
   SymbUnaryElementary :: SymbNumUnaryElementaryFn a -> SymbNumFn ζ a a
   SymbBinaryElementary :: SymbNumBinaryElementaryFn a -> SymbNumFn ζ (a,a) a
   SymbScalarMul :: VectorSpace v => SymbNumFn ζ (v, Scalar v) v
-  SymbInnerProd :: (InnerSpace v, ζ v) => SymbNumFn ζ (v, v) (Scalar v)
-  SymbDiv :: (VectorSpace v, Fractional (Scalar v))
+  SymbScalarDiv :: (VectorSpace v, Fractional (Scalar v))
                   => SymbNumFn ζ (v, Scalar v) v
+  SymbInnerProd :: (InnerSpace v, ζ v) => SymbNumFn ζ (v, v) (Scalar v)
 
 deriving instance Show (SymbNumFn Show a b)
 
@@ -85,6 +85,7 @@ data SymbNumBinaryElementaryFn a where
   SymbPow :: Floating a => SymbNumBinaryElementaryFn a
   SymbLogBase :: Floating a => SymbNumBinaryElementaryFn a
   SymbMul :: Num a => SymbNumBinaryElementaryFn a
+  SymbDiv :: Fractional a => SymbNumBinaryElementaryFn a
 
 deriving instance Eq (SymbNumBinaryElementaryFn a)
 deriving instance Show (SymbNumBinaryElementaryFn a)
@@ -136,9 +137,9 @@ instance ζ () => PreArrow (SymbNumFn ζ) where
     SymbCopy -> f&&&g
     SymbCompo SymbCopy h -> (f&&&g) . h
     φγ -> (f***g) . φγ
-  SymbPar f φ &&& SymbPar g γ = case (f&&&g, φ&&&γ) of
-    (SymbCompo SymbCopy fg, SymbCompo SymbCopy φγ)
-      -> SymbCompo SymbCopy (SymbPar fg φγ)
+  SymbPar f φ &&& SymbPar g γ
+   | (SymbCompo SymbCopy fg, SymbCompo SymbCopy φγ) <- (f&&&g, φ&&&γ)
+       = SymbCompo SymbCopy (SymbPar fg φγ)
   SymbCopy &&& SymbCopy = SymbCompo SymbCopy SymbCopy
   SymbSwap &&& SymbSwap = SymbCompo SymbCopy SymbSwap
   SymbRegroup &&& SymbRegroup = SymbCompo SymbCopy SymbRegroup
@@ -147,7 +148,7 @@ instance ζ () => PreArrow (SymbNumFn ζ) where
   SymbSnd &&& SymbSnd = SymbCompo SymbCopy SymbSnd
   SymbScalarMul &&& SymbScalarMul = SymbCompo SymbCopy SymbScalarMul
   SymbInnerProd &&& SymbInnerProd = SymbCompo SymbCopy SymbInnerProd
-  SymbDiv &&& SymbDiv = SymbCompo SymbCopy SymbDiv
+  SymbScalarDiv &&& SymbScalarDiv = SymbCompo SymbCopy SymbScalarDiv
   f&&&g = SymbCompo (SymbPar f g) SymbCopy
 
   terminal = SymbConst ()
@@ -201,7 +202,7 @@ instance (VectorSpace n, Fractional n, n ~ Scalar n, ζ (), CET ζ n)
             => Fractional (SymbNumVal ζ a n) where
   fromRational = point . fromRational
   recip = genericAgentMap (SymbUnaryElementary SymbRecip)
-  (/) = genericAgentCombine SymbDiv
+  (/) = genericAgentCombine (SymbBinaryElementary SymbDiv)
 
 floatingAgentMap :: (VectorSpace n, Floating n, n ~ Scalar n, ζ (), CET ζ n)
      => SymbElementaryFlFn n -> SymbNumVal ζ a n -> SymbNumVal ζ a n
@@ -242,8 +243,8 @@ instance EnhancedCat (->) (SymbNumFn ζ) where
   arr SymbSnd (_,y) = y
 
   arr SymbScalarMul (v,μ) = μ*^v
+  arr SymbScalarDiv (v,μ) = v^/μ
   arr SymbInnerProd (v,w) = v<.>w
-  arr SymbDiv (x,y) = x^/y
 
   arr (SymbUnaryElementary f) x = case f of
     SymbAbs -> abs x
@@ -271,6 +272,7 @@ instance EnhancedCat (->) (SymbNumFn ζ) where
   arr (SymbBinaryElementary f) (x,y) = case f of
      SymbAdd -> x^+^y
      SymbMul -> x*y
+     SymbDiv -> x/y
      SymbSubtract -> x^-^y
      SymbLogBase -> logBase x y
      SymbPow -> x**y

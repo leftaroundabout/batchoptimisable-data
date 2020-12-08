@@ -420,6 +420,13 @@ instance CPortable Double where
                              = $(double* src0)[$(int s0Offs) + i]
                              * $(double* src1)[$(int s1Offs) + i];
                      } } |]
+  zipPrimitiveNumFunctionToArray SymbDiv
+                      (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         $(double* tgt)[$(int tOffs) + i]
+                             = $(double* src0)[$(int s0Offs) + i]
+                             / $(double* src1)[$(int s1Offs) + i];
+                     } } |]
   zipPrimitiveNumFunctionToArray SymbPow
                       (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
     = [C.block| void { for (int i=0; i < $(int nElems); ++i) {

@@ -28,7 +28,7 @@ import Data.AdditiveGroup
 import Data.VectorSpace
 import Data.Basis
 import Math.LinearMap.Category
-import Math.Category.SymbolicNumFunction
+import Math.Category.SymbolicNumFunction hiding ((===))
 
 import GHC.Exts (IsList(..))
 import GHC.TypeLits (KnownNat)

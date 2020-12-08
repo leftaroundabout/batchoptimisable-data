@@ -64,6 +64,8 @@ numFmapArrayGenericBatchOptimised_cps (SymbConst c) q = q (\i -> do
   shp <- peekOptNumArgBatchShape i
   optimiseConstNumArg c shp
  )
+numFmapArrayGenericBatchOptimised_cps (SymbPar f g) q
+   = numFmapArrayTupleBatchOptimised_par_cps f g q
 numFmapArrayGenericBatchOptimised_cps (SymbCompo f g) q
    = numFmapArrayBatchOptimised_compo_cps f g q
 #ifdef DEBUG_SYMBNUMFN_FMAPPING
@@ -86,6 +88,8 @@ instance BatchOptimisable (UnitOptResArray dims) where
 
 instance OptimisedNumArg () where
   numFmapArrayBatchOptimised_cps = numFmapArrayGenericBatchOptimised_cps
+  numFmapArrayBatchTupleOptimised_cps
+      = numFmapArrayGenericBatchOptimised_cps
   optimiseConstNumArg () = pure . OptUnitOptResArray
 
 
@@ -202,11 +206,15 @@ numFmapArrayBatchScalarTupleOptimised_cps :: ∀ a dims τ b c s φ
             -> OptimiseM s (Optimised (OptResArray c dims) s τ)
              ) -> φ
          ) -> φ
-numFmapArrayBatchScalarTupleOptimised_cps (SymbPar f g) q
-   = numFmapArrayTupleBatchOptimised_par_cps f g q
 numFmapArrayBatchScalarTupleOptimised_cps SymbScalarMul q
    = numFmapArrayBatchScalarTupleOptimised_cps @a @dims @τ @a @a
         (SymbBinaryElementary SymbMul) q
+numFmapArrayBatchScalarTupleOptimised_cps SymbInnerProd q
+   = numFmapArrayBatchScalarTupleOptimised_cps @a @dims @τ @a @a
+        (SymbBinaryElementary SymbMul) q
+numFmapArrayBatchScalarTupleOptimised_cps SymbScalarDiv q
+   = numFmapArrayBatchScalarTupleOptimised_cps @a @dims @τ @a @a
+        (SymbBinaryElementary SymbDiv) q
 numFmapArrayBatchScalarTupleOptimised_cps (SymbBinaryElementary f) q = q
  (\(OptimisedTuple x y) -> do
    let (OptdArr shp vLoc, OptdArr _ wLoc) = (x,y)
@@ -220,16 +228,16 @@ numFmapArrayBatchScalarTupleOptimised_cps (SymbBinaryElementary f) q = q
       return ( OptdArr shp rLoc :: Optimised (OptResArray b dims) s τ
              , pure $ RscReleaseHook (releaseArray rLoc) )
  )
+numFmapArrayBatchScalarTupleOptimised_cps f q
+   = numFmapArrayGenericBatchOptimised_cps f q
 
-#ifdef DEBUG_SYMBNUMFN_FMAPPING
-numFmapArrayBatchScalarTupleOptimised_cps f _ = error
-    $ "Cannot handle " ++ show f
-#endif
 
 type instance OptResArray (b,c) dims = (OptResArray b dims, OptResArray c dims)
 instance (OptimisedNumArg b, OptimisedNumArg c)
       => OptimisedNumArg (b,c) where
   numFmapArrayBatchOptimised_cps = numFmapArrayBatchTupleOptimised_cps
+  numFmapArrayBatchTupleOptimised_cps
+      = numFmapArrayGenericBatchOptimised_cps
   peekOptNumArgBatchShape (OptimisedTuple x _) = peekOptNumArgBatchShape x
   optimiseConstNumArg (l,r) shp = do
      lo <- optimiseConstNumArg l shp
