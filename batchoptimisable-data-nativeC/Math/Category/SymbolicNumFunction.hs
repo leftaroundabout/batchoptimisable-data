@@ -33,12 +33,14 @@ import Control.Arrow.Constrained
 import Data.AdditiveGroup
 import Data.VectorSpace
 
+import Data.Typeable (Typeable, eqT)
+import Data.Type.Equality ((:~:)(Refl))
 import Data.Kind (Type)
 import GHC.Exts (Constraint)
 
 
 data SymbNumFn :: (Type -> Constraint) -> Type -> Type -> Type where
-  SymbConst :: ζ c => c -> SymbNumFn ζ a c
+  SymbConst :: (ζ c, Typeable c, Eq c) => c -> SymbNumFn ζ a c
   SymbId :: SymbNumFn ζ a a
 
   SymbCompo :: SymbNumFn ζ b c -> SymbNumFn ζ a b -> SymbNumFn ζ a c
@@ -66,6 +68,7 @@ data SymbNumUnaryElementaryFn a where
   SymbElementaryFloating
      :: Floating a => SymbElementaryFlFn a -> SymbNumUnaryElementaryFn a
 
+deriving instance Eq (SymbNumUnaryElementaryFn a)
 deriving instance Show (SymbNumUnaryElementaryFn a)
 
 
@@ -74,6 +77,7 @@ data SymbElementaryFlFn :: Type -> Type where
    , SymbAtan, SymbSinh, SymbCosh, SymbTanh, SymbAsinh, SymbAcosh, SymbAtanh
       :: SymbElementaryFlFn a
 
+deriving instance Eq (SymbElementaryFlFn a)
 deriving instance Show (SymbElementaryFlFn a)
 
 data SymbNumBinaryElementaryFn a where
@@ -82,12 +86,19 @@ data SymbNumBinaryElementaryFn a where
   SymbLogBase :: Floating a => SymbNumBinaryElementaryFn a
   SymbMul :: Num a => SymbNumBinaryElementaryFn a
 
+deriving instance Eq (SymbNumBinaryElementaryFn a)
 deriving instance Show (SymbNumBinaryElementaryFn a)
 
 
 instance Category (SymbNumFn ζ) where
   id = SymbId
-  (.) = SymbCompo
+  SymbId . g = g
+  f . SymbId = f
+  SymbConst c . _ = SymbConst c
+  f . SymbCompo g γ = SymbCompo (f . g) γ -- Store composition in left-associative
+                                          -- form, to aid common-subexpression
+                                          -- elimination in &&&.
+  f . g = SymbCompo f g
 
 instance ζ () => Cartesian (SymbNumFn ζ) where
   swap = SymbSwap
@@ -97,16 +108,56 @@ instance ζ () => Cartesian (SymbNumFn ζ) where
   regroup' = SymbRegroup'
 
 instance ζ () => Morphism (SymbNumFn ζ) where
-  (***) = SymbPar
+  f***g = SymbPar f g
+
+infix 4 ===
+(===) :: ∀ a b . (Eq a, Typeable a, Typeable b)
+   => a -> b -> Maybe (a:~:b)
+x===y = case eqT @a @b of
+  Just Refl | x==y  -> Just Refl
+  _ -> Nothing
 
 instance ζ () => PreArrow (SymbNumFn ζ) where
+  SymbId &&& SymbId = SymbCopy
+  SymbConst x &&& SymbConst y
+   | Just Refl <- x===y
+       = SymbCompo SymbCopy (SymbConst x)
+  SymbUnaryElementary f &&& SymbUnaryElementary g
+   | f==g    = SymbCompo SymbCopy (SymbUnaryElementary f)
+  SymbBinaryElementary f &&& SymbBinaryElementary g
+   | f==g    = SymbCompo SymbCopy (SymbBinaryElementary f)
+  f &&& SymbCompo g γ
+   | SymbCompo SymbCopy h <- f&&&γ
+       = (id&&&g) . h
+  SymbCompo f φ &&& g
+   | SymbCompo SymbCopy h <- φ&&&g
+       = (f&&&id) . h
+  SymbCompo f φ &&& SymbCompo g γ = case φ&&&γ of
+    SymbCopy -> f&&&g
+    SymbCompo SymbCopy h -> (f&&&g) . h
+    φγ -> (f***g) . φγ
+  SymbPar f φ &&& SymbPar g γ = case (f&&&g, φ&&&γ) of
+    (SymbCompo SymbCopy fg, SymbCompo SymbCopy φγ)
+      -> SymbCompo SymbCopy (SymbPar fg φγ)
+  SymbCopy &&& SymbCopy = SymbCompo SymbCopy SymbCopy
+  SymbSwap &&& SymbSwap = SymbCompo SymbCopy SymbSwap
+  SymbRegroup &&& SymbRegroup = SymbCompo SymbCopy SymbRegroup
+  SymbRegroup' &&& SymbRegroup' = SymbCompo SymbCopy SymbRegroup'
+  SymbFst &&& SymbFst = SymbCompo SymbCopy SymbFst
+  SymbSnd &&& SymbSnd = SymbCompo SymbCopy SymbSnd
+  SymbScalarMul &&& SymbScalarMul = SymbCompo SymbCopy SymbScalarMul
+  SymbInnerProd &&& SymbInnerProd = SymbCompo SymbCopy SymbInnerProd
+  SymbDiv &&& SymbDiv = SymbCompo SymbCopy SymbDiv
   f&&&g = SymbCompo (SymbPar f g) SymbCopy
+
   terminal = SymbConst ()
   fst = SymbFst
   snd = SymbSnd
 
+type CET ζ o = (ζ o, Eq o, Typeable o)
+
 instance ζ () => WellPointed (SymbNumFn ζ) where
-  type PointObject (SymbNumFn ζ) o = ζ o
+  type PointObject (SymbNumFn ζ) o = (CET ζ o)
   const = SymbConst
   unit = pure ()
 
@@ -122,21 +173,21 @@ instance ζ () => CartesianAgent (SymbNumFn ζ) where
   alg2to1 = genericAlg2to1
   alg2to2 = genericAlg2to2
 
-instance (ζ (), ζ x) => PointAgent (SymbNumVal ζ) (SymbNumFn ζ) a x where
+instance (ζ (), CET ζ x) => PointAgent (SymbNumVal ζ) (SymbNumFn ζ) a x where
   point = genericPoint
 
 
-instance (AdditiveGroup x, ζ (), ζ x) => AdditiveGroup (SymbNumVal ζ a x) where
+instance (AdditiveGroup x, ζ (), CET ζ x) => AdditiveGroup (SymbNumVal ζ a x) where
   zeroV = point zeroV
   (^+^) = genericAgentCombine (SymbBinaryElementary SymbAdd)
   (^-^) = genericAgentCombine (SymbBinaryElementary SymbSubtract)
   negateV = genericAgentMap (SymbUnaryElementary SymbNegate)
 
-instance (VectorSpace v, ζ (), ζ v) => VectorSpace (SymbNumVal ζ a v) where
+instance (VectorSpace v, ζ (), CET ζ v) => VectorSpace (SymbNumVal ζ a v) where
   type Scalar (SymbNumVal ζ a v) = SymbNumVal ζ a (Scalar v)
   (*^) = flip $ genericAgentCombine SymbScalarMul
 
-instance (VectorSpace n, Num n, n ~ Scalar n, ζ (), ζ n)
+instance (VectorSpace n, Num n, n ~ Scalar n, ζ (), CET ζ n)
             => Num (SymbNumVal ζ a n) where
   fromInteger = point . fromInteger
   (+) = (^+^)
@@ -146,17 +197,17 @@ instance (VectorSpace n, Num n, n ~ Scalar n, ζ (), ζ n)
   abs = genericAgentMap (SymbUnaryElementary SymbAbs)
   signum = genericAgentMap (SymbUnaryElementary SymbSignum)
 
-instance (VectorSpace n, Fractional n, n ~ Scalar n, ζ (), ζ n)
+instance (VectorSpace n, Fractional n, n ~ Scalar n, ζ (), CET ζ n)
             => Fractional (SymbNumVal ζ a n) where
   fromRational = point . fromRational
   recip = genericAgentMap (SymbUnaryElementary SymbRecip)
   (/) = genericAgentCombine SymbDiv
 
-floatingAgentMap :: (VectorSpace n, Floating n, n ~ Scalar n, ζ (), ζ n)
+floatingAgentMap :: (VectorSpace n, Floating n, n ~ Scalar n, ζ (), CET ζ n)
      => SymbElementaryFlFn n -> SymbNumVal ζ a n -> SymbNumVal ζ a n
 floatingAgentMap = genericAgentMap . SymbUnaryElementary . SymbElementaryFloating
 
-instance (VectorSpace n, Floating n, n ~ Scalar n, ζ (), ζ n)
+instance (VectorSpace n, Floating n, n ~ Scalar n, ζ (), CET ζ n)
             => Floating (SymbNumVal ζ a n) where
   pi = point pi
   logBase = genericAgentCombine (SymbBinaryElementary SymbLogBase)
