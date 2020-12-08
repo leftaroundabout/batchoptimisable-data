@@ -274,17 +274,130 @@ instance CPortable Double where
   type CCType Double = CDouble
   thawForC = VS.thaw . VS.map realToFrac . VU.convert
   freezeFromC = fmap (VU.convert . VS.map realToFrac) . VS.freeze
+  mapPrimitiveNumFunctionToArray SymbNegate (tgt, tOffs) (src, sOffs) nElems
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = -r;
+                     } } |]
   mapPrimitiveNumFunctionToArray SymbAbs
                              (tgt, tOffs) (src, sOffs) nElems
     = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
                          $(double* tgt)[$(int tOffs)+i]
                              = fabs($(double* src)[$(int sOffs)+i]);
                      } } |]
+  mapPrimitiveNumFunctionToArray SymbSignum (tgt, tOffs) (src, sOffs) nElems
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = r<0? -1
+                             : r>0? 1
+                                  : 0;
+                     } } |]
   mapPrimitiveNumFunctionToArray SymbRelu (tgt, tOffs) (src, sOffs) nElems
     = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
                          double r = $(double* src)[$(int sOffs)+i];
                          $(double* tgt)[$(int tOffs)+i]
                              = r<0? 0 : r;
+                     } } |]
+  mapPrimitiveNumFunctionToArray SymbRecip (tgt, tOffs) (src, sOffs) nElems
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = 1. / r;
+                     } } |]
+  mapPrimitiveNumFunctionToArray (SymbElementaryFloating f)
+           (tgt, tOffs) (src, sOffs) nElems
+   = case f of
+    SymbExp ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = exp(r);
+                     } } |]
+    SymbLog ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = log(r);
+                     } } |]
+    SymbSqrt ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = sqrt(r);
+                     } } |]
+    SymbSin ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = sin(r);
+                     } } |]
+    SymbCos ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = cos(r);
+                     } } |]
+    SymbTan ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = tan(r);
+                     } } |]
+    SymbAsin ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = asin(r);
+                     } } |]
+    SymbAcos ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = acos(r);
+                     } } |]
+    SymbAtan ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = atan(r);
+                     } } |]
+    SymbSinh ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = sinh(r);
+                     } } |]
+    SymbCosh ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = cosh(r);
+                     } } |]
+    SymbTanh ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = tanh(r);
+                     } } |]
+    SymbAsinh ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = asinh(r);
+                     } } |]
+    SymbAcosh ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = acosh(r);
+                     } } |]
+    SymbAtanh ->
+      [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         double r = $(double* src)[$(int sOffs)+i];
+                         $(double* tgt)[$(int tOffs)+i]
+                             = atanh(r);
                      } } |]
   zipPrimitiveNumFunctionToArray SymbAdd
                       (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
@@ -306,6 +419,20 @@ instance CPortable Double where
                          $(double* tgt)[$(int tOffs) + i]
                              = $(double* src0)[$(int s0Offs) + i]
                              * $(double* src1)[$(int s1Offs) + i];
+                     } } |]
+  zipPrimitiveNumFunctionToArray SymbPow
+                      (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         $(double* tgt)[$(int tOffs) + i]
+                             = pow( $(double* src0)[$(int s0Offs) + i]
+                                  , $(double* src1)[$(int s1Offs) + i] );
+                     } } |]
+  zipPrimitiveNumFunctionToArray SymbLogBase
+                      (tgt, tOffs) (src0, s0Offs) (src1, s1Offs) nElems
+    = [C.block| void { for (int i=0; i < $(int nElems); ++i) {
+                         $(double* tgt)[$(int tOffs) + i]
+                             = log( $(double* src1)[$(int s1Offs) + i] )
+                              /log( $(double* src0)[$(int s0Offs) + i] );
                      } } |]
 #ifdef DEBUG_SYMBNUMFN_FMAPPING
   zipPrimitiveNumFunctionToArray f _ _ _ _

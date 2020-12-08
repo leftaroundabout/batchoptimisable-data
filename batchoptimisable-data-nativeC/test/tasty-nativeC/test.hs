@@ -119,16 +119,24 @@ main = do
      , testProperty "Polynomial"
       $ \(l :: [CDoubleArray 5])
             -> optimisedFmapCorrect cpb (\x -> x^3 + 4*x - 7) l
+     , testProperty "Logarithm"
+      $ \(l :: [CDoubleArray 2])
+            -> optimisedFmapCorrect cpb (log . (+0.1) . abs) l
+     , testProperty "Combination elementary function"
+      $ \(l :: [CDoubleArray 2])
+            -> optimisedFmapCorrect cpb (\x ->
+                 abs (tan $ cos x) ** log (cosh x)
+                 - atanh (sin x) * logBase (2 + x*sinh x) (tanh x + 3) ) l
      ]
    ]
 
-optimisedFmapCorrect :: ( KnownNat n, Hask.Traversable t
-                        , EqShow (t (CDoubleArray n)) )
+optimisedFmapCorrect :: ( KnownNat n )
       => SystemCapabilities -> (∀ n . Floating n => n -> n)
-                  -> t (CDoubleArray n) -> QC.Property
+                  -> [CDoubleArray n] -> QC.Property
 optimisedFmapCorrect cpb f l = runWithCapabilities cpb (optimiseBatch
                    (numFmapArrayBatchOptimised (alg f)) l )
-                       === (mapArray f <$> l)
+                       ≈≈≈≈ (mapArray f <$> l)
+ where l≈≈≈≈m = QC.conjoin $ zipWith (≈≈≈) l m
 
 infix 4 ≈≈≈
 (≈≈≈) :: (Eq v, Show v, InnerSpace v, Scalar v ~ Double)
