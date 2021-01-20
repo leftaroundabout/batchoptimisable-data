@@ -159,6 +159,13 @@ allocateVUBatch input = OptimiseM $ \_ -> do
       vals <- VU.unsafeFreeze valV
       return (VUOptimised shape vals, mempty)
 
+instance BatchOptimisable () where
+  newtype Optimised () s t
+    = UnitOptim { getUnitO :: t () }
+  peekBatchShape = pure . getUnitO
+  peekOptimised = peekBatchShape
+  allocateBatch = pure . UnitOptim
+
 instance BatchOptimisable Int where
   newtype Optimised Int s t
     = IntVectorOptim { getIntVUO :: VUOptimised Int s t }
