@@ -552,8 +552,20 @@ class
   useIndividualTupNumOpts :: ∀ x y φ . a ~ (x,y)
       => ( (OptimisedNumArg x, OptimisedNumArg y)
           => φ ) -> φ
+  optArrWrap :: ∀ s τ . Optimised a s τ
+          -> OptimiseM s (Optimised (OptResArray a '[]) s τ)
+  optArrUnwrap :: ∀ s τ . Optimised (OptResArray a '[]) s τ
+                 -> OptimiseM s (Optimised a s τ)
 
 #ifdef DEBUG_SYMBNUMFN_FMAPPING
 deriving instance Show (SymbNumFn OptimisedNumArg a b)
 #endif
 
+numFmapBatchOptimised :: ∀ a r s τ
+      . ( OptimisedNumArg a, OptimisedNumArg r, Traversable τ )
+    => SymbNumFn OptimisedNumArg a r -> Optimised a s τ
+           -> OptimiseM s (Optimised r s τ)
+numFmapBatchOptimised f inp = do
+   asArray <- optArrWrap inp
+   result <- numFmapArrayBatchOptimised f asArray
+   optArrUnwrap result
