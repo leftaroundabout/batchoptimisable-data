@@ -13,6 +13,7 @@ module Data.Batch.Optimisable.NativeC (
    -- * Batch-packed data
    , MultiArray, mapArray
    , CIntArray, CLongArray, CFloatArray, CDoubleArray
+   , numFmapBatchOptimised
    , numFmapArrayBatchOptimised
    ) where
 

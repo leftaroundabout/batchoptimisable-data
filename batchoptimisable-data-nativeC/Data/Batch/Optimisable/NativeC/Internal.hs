@@ -552,10 +552,26 @@ class
   useIndividualTupNumOpts :: ∀ x y φ . a ~ (x,y)
       => ( (OptimisedNumArg x, OptimisedNumArg y)
           => φ ) -> φ
-  optArrWrap :: ∀ s τ . Optimised a s τ
-          -> OptimiseM s (Optimised (OptResArray a '[]) s τ)
-  optArrUnwrap :: ∀ s τ . Optimised (OptResArray a '[]) s τ
-                 -> OptimiseM s (Optimised a s τ)
+  optArrWrap :: ∀ s τ . Traversable τ
+        => Optimised a s τ -> OptimiseM s (Optimised (OptResArray a '[]) s τ)
+  default optArrWrap :: ∀ s τ . ( BatchOptimisable a, VU.Unbox a
+                                , BatchOptimisable (OptResArray a '[])
+                                , OptResArray a '[] ~ MultiArray '[] a
+                                , Traversable τ )
+        => Optimised a s τ -> OptimiseM s (Optimised (OptResArray a '[]) s τ)
+  optArrWrap v = do
+    unarr <- peekOptimised v
+    allocateBatch $ fmap (MultiArray . VU.singleton) unarr
+  optArrUnwrap :: ∀ s τ . Traversable τ
+       => Optimised (OptResArray a '[]) s τ -> OptimiseM s (Optimised a s τ)
+  default optArrUnwrap :: ∀ s τ . ( BatchOptimisable a, VU.Unbox a
+                                , BatchOptimisable (OptResArray a '[])
+                                , OptResArray a '[] ~ MultiArray '[] a
+                                , Traversable τ )
+        => Optimised (OptResArray a '[]) s τ -> OptimiseM s (Optimised a s τ)
+  optArrUnwrap v = do
+    unarr <- peekOptimised v
+    allocateBatch $ fmap (VU.head . getFlatArray) unarr
 
 #ifdef DEBUG_SYMBNUMFN_FMAPPING
 deriving instance Show (SymbNumFn OptimisedNumArg a b)

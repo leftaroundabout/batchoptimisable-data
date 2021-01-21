@@ -91,6 +91,8 @@ instance OptimisedNumArg () where
   numFmapArrayBatchTupleOptimised_cps
       = numFmapArrayGenericBatchOptimised_cps
   optimiseConstNumArg () = pure . OptUnitOptResArray
+  optArrWrap (UnitOptim o) = pure $ OptUnitOptResArray o
+  optArrUnwrap (OptUnitOptResArray o) = pure $ UnitOptim o
 
 
 
@@ -244,3 +246,6 @@ instance (OptimisedNumArg b, OptimisedNumArg c)
      ro <- optimiseConstNumArg r shp
      return $ OptimisedTuple lo ro
   useIndividualTupNumOpts q = q
+  optArrWrap (OptimisedTuple x y) = OptimisedTuple <$> optArrWrap x <*> optArrWrap y
+  optArrUnwrap (OptimisedTuple xw yw)
+             = OptimisedTuple <$> optArrUnwrap xw <*> optArrUnwrap yw

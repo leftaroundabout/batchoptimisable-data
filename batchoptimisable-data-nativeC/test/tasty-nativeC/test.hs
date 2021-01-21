@@ -127,11 +127,23 @@ main = do
             -> optimisedFmapCorrect cpb (\x ->
                  abs (tan $ cos x) ** log (cosh x)
                  - atanh (sin x) * logBase (2 + x*sinh x) (tanh x + 3) ) l
+     , testProperty "Combination elementary function (scalar)"
+      $ \(l :: [Double])
+            -> optimisedApplyCorrect cpb (\x ->
+                 abs (tan $ cos x) ** log (cosh x)
+                 - atanh (sin x) * logBase (2 + x*sinh x) (tanh x + 3) ) l
      ]
    ]
 
+optimisedApplyCorrect :: SystemCapabilities -> (∀ n . Floating n => n -> n)
+                  -> [Double] -> QC.Property
+optimisedApplyCorrect cpb f l = runWithCapabilities cpb (optimiseBatch
+                   (numFmapBatchOptimised (alg f)) l )
+                       ≈≈≈≈ (f <$> l)
+ where l≈≈≈≈m = QC.conjoin $ zipWith (≈≈≈) l m
+
 optimisedFmapCorrect :: ( KnownNat n )
-      => SystemCapabilities -> (∀ n . Floating n => n -> n)
+      => SystemCapabilities -> (∀ r . Floating r => r -> r)
                   -> [CDoubleArray n] -> QC.Property
 optimisedFmapCorrect cpb f l = runWithCapabilities cpb (optimiseBatch
                    (numFmapArrayBatchOptimised (alg f)) l )
