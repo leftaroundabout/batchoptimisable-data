@@ -213,6 +213,16 @@ instance (BatchOptimisable v, BatchableLinFuns s f, Traversable τ)
     unsafeAddVOptimised fxs gxs
   negateV (LinFuncOnBatch f) = LinFuncOnBatch $ negateVOptimised <=< f
 
+instance (BatchOptimisable v, BatchableLinFuns s f, Traversable τ)
+              => VectorSpace (LinFuncOnBatch s σ τ v f) where
+  type Scalar (LinFuncOnBatch s σ τ v f) = s
+  μ *^ LinFuncOnBatch f
+         = LinFuncOnBatch $ \xs -> do
+    shp <- peekBatchShape xs
+    μs <- allocateBatch $ const μ<$>shp
+    fxs <- f xs
+    unsafeScaleOptimised μs fxs
+
 class ( BatchableLinFuns (Scalar v) v, FreeVectorSpace v
       , Category (PointwiseMapCategory v), Object (PointwiseMapCategory v) (Scalar v) )
          => BatchableFreeSpace v where

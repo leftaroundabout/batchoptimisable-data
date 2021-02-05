@@ -208,6 +208,10 @@ numFmapArrayBatchScalarTupleOptimised_cps :: ∀ a dims τ b c s φ
             -> OptimiseM s (Optimised (OptResArray c dims) s τ)
              ) -> φ
          ) -> φ
+numFmapArrayBatchScalarTupleOptimised_cps SymbFst q
+   = q (pure . \(OptimisedTuple x _) -> x)
+numFmapArrayBatchScalarTupleOptimised_cps SymbSnd q
+   = q (pure . \(OptimisedTuple _ y) -> y)
 numFmapArrayBatchScalarTupleOptimised_cps SymbScalarMul q
    = numFmapArrayBatchScalarTupleOptimised_cps @a @dims @τ @a @a
         (SymbBinaryElementary SymbMul) q
